@@ -608,7 +608,9 @@ class BubbleManager:
 
         # Setup mission (also used for observations)
         # XXX: this is not quite right.  route may not be what the agent wants to take.
-        route = sim.traffic_sim.vehicle_route(vehicle_id=vehicle.id)
+        route = []
+        if sim.traffic_sim != None:
+            route = sim.traffic_sim.vehicle_route(vehicle_id=vehicle.id)
         if len(route) > 0:
             goal = PositionalGoal.from_road(route[-1], sim.scenario.road_map)
         else:
