@@ -51,7 +51,7 @@ class MotionPlannerProvider(Provider):
         self._poses = np.empty(shape=(0, 3))  # [[x, y, heading]]; pose of vehicle
         self._is_setup = True
 
-        return ProviderState()
+        return ProviderState(source=__file__)
 
     def teardown(self):
         self._is_setup = False
@@ -80,7 +80,7 @@ class MotionPlannerProvider(Provider):
         self._update_membership(target_poses_at_t)
 
         if not self._vehicle_id_to_index:
-            return ProviderState()
+            return ProviderState(__file__)
 
         target_poses_at_t = np.array(
             [

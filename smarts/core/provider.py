@@ -19,7 +19,7 @@
 # THE SOFTWARE.
 from dataclasses import dataclass, field
 from enum import IntFlag
-from typing import List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
 
 from .controllers import ActionSpaceType
 from .scenario import Scenario
@@ -43,16 +43,18 @@ class ProviderRecoveryFlags(IntFlag):
 class ProviderState:
     """State information from a provider."""
 
+    source: Any
     vehicles: List[VehicleState] = field(default_factory=list)
     dt: Optional[float] = None  # most Providers can leave this blank
+    priority: int = 0
 
     def merge(self, other: "ProviderState"):
         """Merge state with another provider's state."""
         our_vehicles = {v.vehicle_id for v in self.vehicles}
         other_vehicles = {v.vehicle_id for v in other.vehicles}
-        assert our_vehicles.isdisjoint(other_vehicles)
+        # assert our_vehicles.isdisjoint(other_vehicles), f"Our vehicles {self.source} conflicts with {other.source}"
 
-        self.vehicles += other.vehicles
+        self.vehicles += filter(lambda v: v.vehicle_id not in our_vehicles, other.vehicles)
         self.dt = max(self.dt, other.dt, key=lambda x: x if x else 0)
 
     def filter(self, vehicle_ids):

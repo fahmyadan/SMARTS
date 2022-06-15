@@ -60,7 +60,7 @@ class TrafficHistoryProvider(Provider):
         if self._histories:
             self._histories.connect_for_multiple_queries()
         self._is_setup = True
-        return ProviderState()
+        return ProviderState(source=__file__)
 
     def set_replaced_ids(self, vehicle_ids: Iterable[str]):
         """Replace the given vehicles, excluding them from control by this provider."""
@@ -133,4 +133,4 @@ class TrafficHistoryProvider(Provider):
             for v_id in self._last_step_vehicles - vehicle_ids
         }
         self._last_step_vehicles = vehicle_ids
-        return ProviderState(vehicles=vehicles)
+        return ProviderState(source=__file__, vehicles=vehicles)
