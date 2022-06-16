@@ -181,12 +181,12 @@ def test_trajectory_interpolation_provider(
     provider.setup(scenario)
 
     # we sync with the empty provider state since we don't have any other active providers
-    provider.sync(ProviderState())
+    provider.sync(ProviderState(__file__))
 
     dt = 0.1
     elapsed_sim_time = 0
     has_error = False
-    provider_state = ProviderState()
+    provider_state = ProviderState(__file__)
     try:
         provider_state = provider.step(
             provider_actions=provider_action, dt=dt, elapsed_sim_time=elapsed_sim_time

@@ -100,6 +100,7 @@ class MotionPlannerProvider(Provider):
         vehicle_config_type = "passenger"  # TODO: allow for multiple vehicle types
 
         return ProviderState(
+            __file__,
             vehicles=[
                 VehicleState(
                     vehicle_id=v_id,

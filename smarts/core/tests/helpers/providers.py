@@ -30,6 +30,7 @@ class MockProvider(Provider):
 
     def override_next_provider_state(self, vehicles: Sequence):
         self._next_provider_state = ProviderState(
+            __file__,
             vehicles=[
                 VehicleState(
                     vehicle_id=vehicle_id,
@@ -47,7 +48,7 @@ class MockProvider(Provider):
         self._next_provider_state = None
 
     def setup(self, provider_actions) -> ProviderState:
-        return ProviderState()
+        return ProviderState(__file__)
 
     @property
     def action_spaces(self) -> Set[ActionSpaceType]:
@@ -58,7 +59,7 @@ class MockProvider(Provider):
 
     def step(self, provider_actions, dt, elapsed_sim_time) -> ProviderState:
         if self._next_provider_state is None:
-            return ProviderState(vehicles=[])
+            return ProviderState(__file__, vehicles=[])
 
         return self._next_provider_state
 
