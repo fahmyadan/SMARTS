@@ -52,7 +52,7 @@ class TrajectoryInterpolationProvider(Provider):
 
     def setup(self, scenario) -> ProviderState:
         self._is_setup = True
-        return ProviderState(__file__)
+        return ProviderState()
 
     def reset(self):
         pass
@@ -72,7 +72,7 @@ class TrajectoryInterpolationProvider(Provider):
             ProviderState: [description]
         """
 
-        provider_state = ProviderState(__file__)
+        provider_state = ProviderState()
 
         for vehicle_id, traj in provider_actions.items():
             pose, speed = self.perform_trajectory_interpolation(dt, traj)

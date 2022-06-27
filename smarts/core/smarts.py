@@ -945,7 +945,7 @@ class SMARTS:
             for agent_id, interface in self._agent_manager.agent_interfaces.items()
             if action_space_pred(interface.action_space)
         }
-        provider_state = ProviderState(__file__)
+        provider_state = ProviderState()
         for vehicle_id in self._vehicle_index.agent_vehicle_ids():
             agent_id = self._vehicle_index.actor_id_from_vehicle_id(vehicle_id)
             if agent_id not in agent_ids:
@@ -989,7 +989,7 @@ class SMARTS:
         return None
 
     def _setup_providers(self, scenario) -> ProviderState:
-        provider_state = ProviderState(source=__file__)
+        provider_state = ProviderState()
         for provider in self.providers:
             try:
                 new_provider_state = provider.setup(scenario)
@@ -1036,7 +1036,7 @@ class SMARTS:
                 self._scenario, self.elapsed_sim_time, provider_error
             )
 
-        provider_state = provider_state or ProviderState(__file__)
+        provider_state = provider_state or ProviderState()
         if recovered:
             return provider_state
 
@@ -1055,7 +1055,7 @@ class SMARTS:
         raise provider_error
 
     def _step_providers(self, actions) -> ProviderState:
-        accumulated_provider_state = ProviderState(__file__)
+        accumulated_provider_state = ProviderState()
 
         def agent_controls_vehicles(agent_id):
             vehicles = self._vehicle_index.vehicles_by_actor_id(agent_id)

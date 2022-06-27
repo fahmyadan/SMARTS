@@ -392,7 +392,7 @@ class SumoTrafficSimulation(Provider):
             self._handle_traci_disconnect(error)
         elif isinstance(error, Exception):
             raise error
-        return ProviderState(__file__), False
+        return ProviderState(), False
 
     def step(self, provider_actions, dt, elapsed_sim_time) -> ProviderState:
         """
@@ -402,7 +402,7 @@ class SumoTrafficSimulation(Provider):
             ProviderState representing the state of the SUMO simulation
         """
         if not self.connected:
-            return ProviderState(__file__)
+            return ProviderState()
         return self._step(dt)
 
     def _step(self, dt):
@@ -603,7 +603,6 @@ class SumoTrafficSimulation(Provider):
 
     def _compute_provider_state(self) -> ProviderState:
         return ProviderState(
-            __file__,
             vehicles=self._compute_traffic_vehicles(),
         )
 

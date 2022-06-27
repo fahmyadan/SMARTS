@@ -61,7 +61,7 @@ class TrafficHistoryProvider(Provider):
         if self._histories:
             self._histories.connect_for_multiple_queries()
         self._is_setup = True
-        return ProviderState(source=__file__)
+        return ProviderState()
 
     def set_replaced_ids(self, vehicle_ids: Iterable[str]):
         """Replace the given vehicles, excluding them from control by this provider."""
@@ -104,7 +104,7 @@ class TrafficHistoryProvider(Provider):
         self, provider_actions, dt: float, elapsed_sim_time: float
     ) -> ProviderState:
         if not self._histories:
-            return ProviderState(source=__file__, vehicles=[])
+            return ProviderState(vehicles=[])
         vehicles = []
         vehicle_ids = set()
         rounder = rounder_for_dt(dt)
@@ -140,4 +140,4 @@ class TrafficHistoryProvider(Provider):
             for v_id in self._last_step_vehicles - vehicle_ids
         }
         self._last_step_vehicles = vehicle_ids
-        return ProviderState(source=__file__, vehicles=vehicles)
+        return ProviderState(vehicles=vehicles)
