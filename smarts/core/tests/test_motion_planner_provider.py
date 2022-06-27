@@ -54,7 +54,7 @@ def test_we_reach_target_pose_at_given_time(motion_planner_provider, loop_scenar
     motion_planner_provider.setup(loop_scenario)
 
     # we sync with the empty provider state since we don't have any other active providers
-    motion_planner_provider.sync(ProviderState(__file__))
+    motion_planner_provider.sync(ProviderState())
 
     motion_planner_provider.create_vehicle(
         VehicleState(
