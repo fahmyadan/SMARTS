@@ -64,7 +64,7 @@ def data_replay_path():
 
 @pytest.fixture
 def scenarios_iterator():
-    scenarios = ["scenarios/loop", "scenarios/intersections/6lane"]
+    scenarios = ["scenarios/sumo/loop", "scenarios/sumo/intersections/6lane"]
     return Scenario.scenario_variations(scenarios, [AGENT_ID])
 
 
@@ -125,7 +125,7 @@ def test_data_replay(agent_spec, scenarios_iterator, data_replay_path, monkeypat
     envision = Envision(output_dir=data_replay_path)
     smarts = SMARTS(
         agent_interfaces={AGENT_ID: agent_spec.interface},
-        traffic_sim=SumoTrafficSimulation(time_resolution=TIMESTEP_SEC),
+        traffic_sims=[SumoTrafficSimulation(time_resolution=TIMESTEP_SEC)],
         envision=envision,
         fixed_timestep_sec=TIMESTEP_SEC,
     )
@@ -148,7 +148,9 @@ def test_data_replay(agent_spec, scenarios_iterator, data_replay_path, monkeypat
     assert new_sent_data.qsize() == 0
 
     # Now read data replay
-    Envision.read_and_send(jsonl_paths[0], fixed_timestep_sec=TIMESTEP_SEC)
+    Envision.read_and_send(
+        str(jsonl_paths[0].absolute()), fixed_timestep_sec=TIMESTEP_SEC
+    )
 
     # Verify the new data matches the original data
     assert original_sent_data.qsize() == new_sent_data.qsize()

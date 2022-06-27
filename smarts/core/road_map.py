@@ -91,7 +91,8 @@ class RoadMap:
     def nearest_lanes(
         self, point: Point, radius: Optional[float] = None, include_junctions=True
     ) -> List[Tuple[RoadMap.Lane, float]]:
-        """Find lanes on this road map that are near the given point."""
+        """Find lanes on this road map that are near the given point.
+        Returns a list of tuples of lane and distance, sorted by distance."""
         raise NotImplementedError()
 
     def nearest_lane(
@@ -128,11 +129,15 @@ class RoadMap:
         """
         raise NotImplementedError()
 
-    def random_route(self, max_route_len: int = 10) -> RoadMap.Route:
+    def random_route(
+        self, max_route_len: int = 10, starting_road: Optional[RoadMap.Road] = None
+    ) -> RoadMap.Route:
         """Generate a random route contained in this road map.
         Args:
             max_route_len:
                 The total number of roads in the route.
+            starting_road:
+                If specified, the route will start with this road.
         Returns:
             A randomly generated route.
         """
@@ -218,8 +223,8 @@ class RoadMap:
         @property
         def composite_lane(self) -> RoadMap.Lane:
             """Return an abstract Lane composed of one or more RoadMap.Lane segments
-            that has been inferred to correspond to one continuous real-world lane.
-            May return same object as self."""
+            (including this one) that has been inferred to correspond to one
+            continuous real-world lane.  May return same object as self."""
             return self
 
         @property
@@ -229,8 +234,8 @@ class RoadMap:
             return False
 
         @property
-        def speed_limit(self) -> float:
-            """The speed limit on this lane."""
+        def speed_limit(self) -> Optional[float]:
+            """The speed limit on this lane.  May be None if not defined."""
             raise NotImplementedError()
 
         @property
@@ -373,7 +378,7 @@ class RoadMap:
             return self.from_lane_coord(RefLinePoint(s=offset))
 
         def vector_at_offset(self, start_offset: float) -> np.ndarray:
-            """The lane direction vector at the given offset."""
+            """The lane direction vector at the given offset (not normalized)."""
             if start_offset >= self.length:
                 s_offset = self.length - 1
                 end_offset = self.length
@@ -399,20 +404,25 @@ class RoadMap:
             """lookahead (in meters) is the size of the window to use
             to compute the curvature, which must be at least 1 to make sense.
             This may return math.inf if the lane is straight."""
-            assert lookahead > 1
-            if offset + lookahead > self.length:
-                return math.inf
+            assert lookahead > 0
             prev_heading_rad = None
             heading_deltas = 0.0
+            lane = self
             for i in range(lookahead + 1):
-                vec = self.vector_at_offset(offset + i)[:2]
+                if offset + i > lane.length:
+                    if len(lane.outgoing_lanes) != 1:
+                        break
+                    lane = lane.outgoing_lanes[0]
+                    offset = -i
+                vec = lane.vector_at_offset(offset + i)[:2]
                 heading_rad = vec_to_radians(vec[:2])
                 if prev_heading_rad is not None:
+                    # XXX: things like S curves can cancel out here
                     heading_deltas += min_angles_difference_signed(
                         heading_rad, prev_heading_rad
                     )
                 prev_heading_rad = heading_rad
-            return lookahead / heading_deltas if heading_deltas else math.inf
+            return i / heading_deltas if heading_deltas else math.inf
 
         ## ======== \Reference Methods =========
 
@@ -438,8 +448,8 @@ class RoadMap:
         @property
         def composite_road(self) -> RoadMap.Road:
             """Return an abstract Road composed of one or more RoadMap.Road segments
-            that has been inferred to correspond to one continuous real-world road.
-            May return same object as self."""
+            (including this one) that has been inferred to correspond to one continuous
+            real-world road.  May return same object as self."""
             return self
 
         @property

@@ -21,7 +21,7 @@ import logging
 from copy import copy, deepcopy
 from enum import IntEnum
 from io import StringIO
-from typing import FrozenSet, Iterator, NamedTuple, Optional, Tuple, Union
+from typing import FrozenSet, Iterator, NamedTuple, Optional, Set, Tuple, Union
 
 import numpy as np
 import tableprint as tp
@@ -34,7 +34,7 @@ from smarts.core.utils.string import truncate
 from .chassis import AckermannChassis, BoxChassis
 from .controllers import ControllerState
 from .sensors import SensorState
-from .vehicle import Vehicle
+from .vehicle import ActorRole, Vehicle
 
 VEHICLE_INDEX_ID_LENGTH = 128
 
@@ -49,9 +49,11 @@ def _2id(id_: str):
     return (separator + id_).zfill(VEHICLE_INDEX_ID_LENGTH - len(separator))
 
 
+# TAI:  Use ActorRole enum from vehicle.py insetad?
 class _ActorType(IntEnum):
-    Social = 0
+    Social = 0  # Traffic
     Agent = 1
+    External = 2  # cannot be hijacked or trapped
 
 
 class _ControlEntity(NamedTuple):
@@ -156,37 +158,35 @@ class VehicleIndex:
         return result
 
     @cache
-    def vehicle_ids(self):
+    def vehicle_ids(self) -> Set[str]:
         """A set of all unique vehicles ids in the index."""
         vehicle_ids = self._controlled_by["vehicle_id"]
-        vehicle_ids = [self._2id_to_id[id_] for id_ in vehicle_ids]
-        return set(vehicle_ids)
+        return {self._2id_to_id[id_] for id_ in vehicle_ids}
 
     @cache
-    def agent_vehicle_ids(self):
+    def agent_vehicle_ids(self) -> Set[str]:
         """A set of vehicle ids associated with an agent."""
         vehicle_ids = self._controlled_by[
             self._controlled_by["actor_type"] == _ActorType.Agent
         ]["vehicle_id"]
-
-        vehicle_ids = [self._2id_to_id[id_] for id_ in vehicle_ids]
-        return set(vehicle_ids)
+        return {self._2id_to_id[id_] for id_ in vehicle_ids}
 
     @cache
-    def social_vehicle_ids(self, vehicle_types: Optional[FrozenSet[str]] = None):
+    def social_vehicle_ids(
+        self, vehicle_types: Optional[FrozenSet[str]] = None
+    ) -> Set[str]:
         """A set of vehicle ids associated with traffic vehicles."""
         vehicle_ids = self._controlled_by[
             self._controlled_by["actor_type"] == _ActorType.Social
         ]["vehicle_id"]
-        vehicle_ids = [
+        return {
             self._2id_to_id[id_]
             for id_ in vehicle_ids
             if not vehicle_types or self._vehicles[id_].vehicle_type in vehicle_types
-        ]
-        return set(vehicle_ids)
+        }
 
     @cache
-    def vehicle_is_hijacked_or_shadowed(self, vehicle_id):
+    def vehicle_is_hijacked_or_shadowed(self, vehicle_id) -> Tuple[bool, bool]:
         """Determine if a vehicle is either taken over by an agent or watched by an agent."""
         vehicle_id = _2id(vehicle_id)
 
@@ -266,12 +266,12 @@ class VehicleIndex:
         vehicle_ids = self.vehicle_ids_by_actor_id(actor_id, include_shadowers)
         return [self._vehicles[_2id(id_)] for id_ in vehicle_ids]
 
-    def vehicle_is_hijacked(self, vehicle_id):
+    def vehicle_is_hijacked(self, vehicle_id: str) -> bool:
         """Determine if a vehicle is controlled by an actor."""
         is_hijacked, _ = self.vehicle_is_hijacked_or_shadowed(vehicle_id)
         return is_hijacked
 
-    def vehicle_is_shadowed(self, vehicle_id):
+    def vehicle_is_shadowed(self, vehicle_id: str) -> bool:
         """Determine if a vehicle is watched by an actor."""
         _, is_shadowed = self.vehicle_is_hijacked_or_shadowed(vehicle_id)
         return is_shadowed
@@ -286,7 +286,7 @@ class VehicleIndex:
         """A list of all vehicle IDs paired with their vehicle."""
         return map(lambda x: (self._2id_to_id[x[0]], x[1]), self._vehicles.items())
 
-    def vehicle_by_id(self, vehicle_id, default=...):
+    def vehicle_by_id(self, vehicle_id: str, default=...):
         """Get a vehicle by its id."""
         vehicle_id = _2id(vehicle_id)
         if default is ...:
@@ -431,7 +431,6 @@ class VehicleIndex:
 
         vehicle = self._vehicles[vehicle_id]
         chassis = None
-        # change this to dynamic_action_spaces later when pr merged
         if agent_interface and agent_interface.action in sim.dynamic_action_spaces:
             chassis = AckermannChassis(pose=vehicle.pose, bullet_client=sim.bc)
         else:
@@ -468,6 +467,7 @@ class VehicleIndex:
         Vehicle.detach_all_sensors_from_vehicle(vehicle)
         # pytype: enable=attribute-error
 
+        # TAI: del self._sensor_states[vehicle_id]
         v_index = self._controlled_by["vehicle_id"] == vehicle_id
         entity = self._controlled_by[v_index][0]
         entity = _ControlEntity(*entity)
@@ -564,14 +564,22 @@ class VehicleIndex:
         new_vehicle.chassis.inherit_physical_values(vehicle.chassis)
 
         # Reserve space inside the traffic sim
-        sim._traffic_sim.reserve_traffic_location_for_vehicle(
-            vehicle.id, vehicle.chassis.to_polygon
-        )
+        for traffic_sim in sim.traffic_sims:
+            if traffic_sim.manages_vehicle(vehicle.id):
+                traffic_sim.reserve_traffic_location_for_vehicle(
+                    vehicle.id, vehicle.chassis.to_polygon
+                )
 
         # Remove the old vehicle
         self.teardown_vehicles_by_vehicle_ids([vehicle.id])
-        # HACK: Directly remove the vehicle from the traffic provider
-        sim._traffic_sim.remove_traffic_vehicle(vehicle.id)
+        # HACK: Directly remove the vehicle from the traffic provider (should do this via the sim instead)
+        for traffic_sim in sim.traffic_sims:
+            if traffic_sim.manages_vehicle(vehicle.id):
+                # TAI:  we probably should call "remove_vehicle(vehicle.id)" here instead,
+                # and then call "add_vehicle(new_vehicle.state)", but since
+                # the old and new vehicle-id and state are supposed to be the same
+                # we take this short-cut.
+                traffic_sim.stop_managing(vehicle.id)
 
         # Take control of the new vehicle
         self._enfranchise_actor(
@@ -698,10 +706,16 @@ class VehicleIndex:
         self._vehicles[vehicle_id] = vehicle
         self._2id_to_id[vehicle_id] = vehicle.id
 
+        actor_type = (
+            _ActorType.Social
+            if vehicle_state.source != "EXTERNAL"
+            and vehicle_state.role != ActorRole.Privileged
+            else _ActorType.External
+        )
         entity = _ControlEntity(
             vehicle_id=vehicle_id,
             actor_id=actor_id,
-            actor_type=_ActorType.Social,
+            actor_type=actor_type,
             shadow_actor_id="",
             is_boid=False,
             is_hijacked=False,

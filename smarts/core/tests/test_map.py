@@ -36,17 +36,17 @@ from smarts.sstudio.types import MapSpec
 
 @pytest.fixture
 def sumo_scenario():
-    return Scenario(scenario_root="scenarios/intersections/4lane")
+    return Scenario(scenario_root="scenarios/sumo/intersections/4lane")
 
 
 @pytest.fixture
 def opendrive_scenario_4lane():
-    return Scenario(scenario_root="scenarios/od_4lane")
+    return Scenario(scenario_root="scenarios/open_drive/od_4lane")
 
 
 @pytest.fixture
 def opendrive_scenario_merge():
-    return Scenario(scenario_root="scenarios/od_merge")
+    return Scenario(scenario_root="scenarios/open_drive/od_merge")
 
 
 def test_sumo_map(sumo_scenario):
@@ -60,7 +60,7 @@ def test_sumo_map(sumo_scenario):
     assert lane.index == 0
     assert lane.road.contains_point(point)
     assert lane.is_drivable
-    assert lane.length == 55.6
+    assert round(lane.length, 4) == 55.6
 
     right_lane, direction = lane.lane_to_right
     assert not right_lane
@@ -106,10 +106,8 @@ def test_sumo_map(sumo_scenario):
 
     foes = out_lanes[0].foes
     assert foes
-    assert len(foes) == 3
+    assert len(foes) == 1
     foe_set = set(f.lane_id for f in foes)
-    assert "edge-east-EW_0" in foe_set  # entering from east
-    assert "edge-north-NS_0" in foe_set  # entering from north
     assert ":junction-intersection_5_0" in foe_set  # crossing from east-to-west
 
     # Test the lane vector for a refline point outside lane
@@ -140,8 +138,9 @@ def test_sumo_map(sumo_scenario):
     for r2lane in r2.lanes:
         if r2lane.index == 1:
             assert any(
-                r2lane == cand[0] and math.isclose(cand[1], 53.6) for cand in cands
-            )
+                r2lane == cand[0] and math.isclose(cand[1], 53.6059606)
+                for cand in cands
+            ), cands
 
 
 def test_opendrive_map_4lane(opendrive_scenario_4lane):

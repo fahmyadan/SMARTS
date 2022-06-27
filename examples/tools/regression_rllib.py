@@ -51,6 +51,8 @@ class RLlibTFSavedModelAgent(Agent):
         # These tensor names were found by inspecting the trained model
         output_node = graph.get_tensor_by_name("default_policy/add:0")
         input_node = graph.get_tensor_by_name("default_policy/observation:0")
+        if not self._sess:
+            return []
         res = self._sess.run(output_node, feed_dict={input_node: [obs]})
         action = res[0]
         return action
@@ -82,7 +84,7 @@ def run_experiment(log_path, experiment_name, training_iteration=100):
     agent_spec = AgentSpec(
         interface=AgentInterface.from_type(AgentType.Standard, max_episode_steps=5000),
         agent_builder=RLlibTFSavedModelAgent,
-        agent_params=dict(
+        agent_params=(
             model_path.absolute(),
             OBSERVATION_SPACE,
         ),
@@ -100,7 +102,7 @@ def run_experiment(log_path, experiment_name, training_iteration=100):
         )
     }
 
-    scenario_path = Path(__file__).parent / "../../scenarios/loop"
+    scenario_path = Path(__file__).parent / "../../scenarios/sumo/loop"
     scenario_path = str(scenario_path.absolute())
 
     tune_confg = {

@@ -37,11 +37,12 @@ from smarts.core.sumo_traffic_simulation import SumoTrafficSimulation
 @pytest.fixture
 def scenarios():
     mission = Mission(
-        start=Start((71.65, 63.78), Heading(math.pi * 0.91)), goal=EndlessGoal()
+        start=Start(np.array((71.65, 63.78)), Heading(math.pi * 0.91)),
+        goal=EndlessGoal(),
     )
     scenario = Scenario(
-        scenario_root="scenarios/loop",
-        route="basic.rou.xml",
+        scenario_root="scenarios/sumo/loop",
+        traffic_specs=["scenarios/sumo/loop/traffic/basic.rou.xml"],
         missions={"Agent-007": mission},
     )
     return cycle([scenario])
@@ -56,7 +57,7 @@ def smarts():
     )
     smarts = SMARTS(
         agent_interfaces={"Agent-007": buddha},
-        traffic_sim=SumoTrafficSimulation(headless=True),
+        traffic_sims=[SumoTrafficSimulation(headless=True)],
         envision=None,
     )
 

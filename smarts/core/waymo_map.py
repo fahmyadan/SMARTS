@@ -932,8 +932,6 @@ class WaymoMap(RoadMap):
         def shape(
             self, buffer_width: float = 0.0, default_width: Optional[float] = None
         ) -> Polygon:
-            """Returns a polygon representing this lane, buffered by buffered_width (which must be non-negative),
-            where buffer_width is a buffer around the perimeter of the polygon."""
             if buffer_width == 0.0:
                 return Polygon(self._lane_polygon)
             new_width = self._lane_width + buffer_width
@@ -1009,22 +1007,21 @@ class WaymoMap(RoadMap):
             return self._get_side_lane("right")
 
         @property
-        def speed_limit(self) -> float:
+        def speed_limit(self) -> Optional[float]:
             return self._speed_limit
 
-        @lru_cache(maxsize=8)
+        @lru_cache(maxsize=1024)
         def offset_along_lane(self, world_point: Point) -> float:
             return offset_along_shape(world_point[:2], self._centerline_pts)
 
-        @lru_cache(maxsize=8)
         def width_at_offset(self, lane_point_s: float) -> Tuple[float, float]:
             return self._lane_width, 1.0
 
-        @lru_cache(maxsize=8)
+        @lru_cache(maxsize=1024)
         def from_lane_coord(self, lane_point: RefLinePoint) -> Point:
             return position_at_shape_offset(self._centerline_pts, lane_point.s)
 
-        @lru_cache(maxsize=8)
+        @lru_cache(maxsize=1024)
         def to_lane_coord(self, world_point: Point) -> RefLinePoint:
             return super().to_lane_coord(world_point)
 
@@ -1032,7 +1029,7 @@ class WaymoMap(RoadMap):
         def center_at_point(self, point: Point) -> Point:
             return super().center_at_point(point)
 
-        @lru_cache(8)
+        @lru_cache(1024)
         def vector_at_offset(self, start_offset: float) -> np.ndarray:
             return super().vector_at_offset(start_offset)
 
@@ -1040,7 +1037,7 @@ class WaymoMap(RoadMap):
         def center_pose_at_point(self, point: Point) -> Pose:
             return super().center_pose_at_point(point)
 
-        @lru_cache(maxsize=8)
+        @lru_cache(maxsize=1024)
         def curvature_radius_at_offset(
             self, offset: float, lookahead: int = 5
         ) -> float:
@@ -1287,8 +1284,6 @@ class WaymoMap(RoadMap):
         def shape(
             self, buffer_width: float = 0.0, default_width: Optional[float] = None
         ) -> Polygon:
-            """Returns the polygon representing this buffered by buffered_width (which must be non-negative),
-            where buffer_width is a buffer around the perimeter of the polygon."""
             # TODO:  use buffer_width
             return Polygon(
                 (
@@ -1351,7 +1346,7 @@ class WaymoMap(RoadMap):
                 neighboring_lanes.append((lane, d))
         return neighboring_lanes
 
-    @lru_cache(maxsize=16)
+    @lru_cache(maxsize=1024)
     def nearest_lanes(
         self,
         point: Point,
@@ -1382,7 +1377,7 @@ class WaymoMap(RoadMap):
         return None
 
     class Route(RoadMap.Route):
-        """Describes a route between roads."""
+        """Describes a route between Waymo roads."""
 
         def __init__(self, road_map):
             self._roads = []
@@ -1397,8 +1392,7 @@ class WaymoMap(RoadMap):
         def road_length(self) -> float:
             return self._length
 
-        def add_road(self, road: RoadMap.Road):
-            """Add a road to this route."""
+        def _add_road(self, road: RoadMap.Road):
             self._length += road.length
             self._roads.append(road)
 
@@ -1553,15 +1547,17 @@ class WaymoMap(RoadMap):
             route_roads.extend(sub_route[:-1])
 
         for road in route_roads:
-            new_route.add_road(road)
+            new_route._add_road(road)
         return result
 
-    def random_route(self, max_route_len: int = 10) -> RoadMap.Route:
+    def random_route(
+        self, max_route_len: int = 10, starting_road: Optional[RoadMap.Road] = None
+    ) -> RoadMap.Route:
         route = WaymoMap.Route(self)
-        next_roads = list(self._roads.values())
+        next_roads = [starting_road] if starting_road else list(self._roads.values())
         while next_roads and len(route.roads) < max_route_len:
             cur_road = random.choice(next_roads)
-            route.add_road(cur_road)
+            route._add_road(cur_road)
             next_roads = list(cur_road.outgoing_roads)
         return route
 

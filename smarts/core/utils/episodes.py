@@ -107,7 +107,7 @@ class EpisodeLog:
     scores: dict = field(default_factory=lambda: defaultdict(lambda: 0))
     steps: int = 0
     scenario_map: str = ""
-    scenario_routes: str = ""
+    scenario_traffic: str = ""
     mission_hash: str = ""
 
     @property
@@ -134,7 +134,9 @@ class EpisodeLog:
         """Record a scenario end."""
         self.fixed_timestep_sec = scenario_log["fixed_timestep_sec"]
         self.scenario_map = scenario_log["scenario_map"]
-        self.scenario_routes = scenario_log["scenario_routes"]
+        self.scenario_traffic = scenario_log.get(
+            "scenario_traffic", scenario_log.get("scenario_routes", "")
+        )
         self.mission_hash = scenario_log["mission_hash"]
 
     def record_step(self, observations=None, rewards=None, dones=None, infos=None):

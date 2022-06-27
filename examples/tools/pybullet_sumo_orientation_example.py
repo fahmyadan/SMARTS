@@ -1,4 +1,6 @@
+# type: ignore
 from pathlib import Path
+from typing import Dict
 
 import numpy as np
 
@@ -8,7 +10,7 @@ from smarts.core.scenario import Scenario
 from smarts.core.sumo_traffic_simulation import SumoTrafficSimulation
 from smarts.core.utils import pybullet
 from smarts.core.utils.pybullet import bullet_client as bc
-from smarts.core.vehicle import VEHICLE_CONFIGS, Vehicle, VehicleState
+from smarts.core.vehicle import ActorRole, VEHICLE_CONFIGS, Vehicle, VehicleState
 
 TIMESTEP_SEC = 1 / 240
 INITIAL_KINEMATICS_VEHICLES = 50
@@ -29,6 +31,9 @@ def look_at(client, position=(0, 0, 0), top_down=True):
             cameraYaw=15,
             cameraPitch=0,
         )
+
+
+# pytype: disable=name-error
 
 
 def social_spin_on_bumper_cw(step, front_bumper_position, length):
@@ -59,13 +64,13 @@ def run(
     prev_friction_sum = None
     scenario = next(
         Scenario.variations_for_all_scenario_roots(
-            ["scenarios/loop"], agents_to_be_briefed=["007"]
+            ["scenarios/sumo/loop"], agents_to_be_briefed=["007"]
         )
     )
     previous_provider_state = traffic_sim.setup(scenario)
     traffic_sim.sync(previous_provider_state)
     previous_vehicle_ids = set()
-    vehicles = dict()
+    vehicles: Dict[str, Vehicle] = dict()
 
     passenger_dimen = VEHICLE_CONFIGS["passenger"].dimensions
 
@@ -86,7 +91,7 @@ def run(
             # ),
         ]
 
-        current_provider_state = traffic_sim.step(0.01)
+        current_provider_state = traffic_sim.step(None, 0.01, step * 0.01)
         for pose, i in zip(injected_poses, range(len(injected_poses))):
             converted_to_provider = VehicleState(
                 vehicle_id=f"EGO{i}",
@@ -95,6 +100,7 @@ def run(
                 dimensions=passenger_dimen,
                 speed=0,
                 source="TESTS",
+                role=ActorRole.EgoAgent,
             )
             current_provider_state.vehicles.append(converted_to_provider)
         traffic_sim.sync(current_provider_state)
@@ -105,9 +111,10 @@ def run(
 
         for v_id in vehicle_ids_added:
             pose = Pose.from_center([0, 0, 0], Heading(0))
-            vehicles[v] = Vehicle(
+            vehicles[v_id] = Vehicle(
                 id=v_id,
                 chassis=BoxChassis(
+                    pose=pose,
                     speed=0,
                     dimensions=vehicle_config.dimensions,
                     bullet_client=client,
@@ -117,7 +124,8 @@ def run(
         # Hide any additional vehicles
         for v in vehicle_ids_removed:
             veh = vehicles.pop(v, None)
-            veh.teardown()
+            if veh:
+                veh.teardown()
 
         for pv in current_provider_state.vehicles:
             vehicles[pv.vehicle_id].control(pv.pose, pv.speed)
@@ -129,6 +137,9 @@ def run(
         previous_vehicle_ids = current_vehicle_ids
 
     traffic_sim.teardown()
+
+
+# pytype: enable=name-error
 
 
 if __name__ == "__main__":
@@ -152,7 +163,7 @@ if __name__ == "__main__":
             # frictionERP=0.1,
         )
 
-        path = Path(__file__).parent / "../smarts/core/models/plane.urdf"
+        path = Path(__file__).parent / "../../smarts/core/models/plane.urdf"
         path = str(path.absolute())
         plane_body_id = client.loadURDF(path, useFixedBase=True)
 
