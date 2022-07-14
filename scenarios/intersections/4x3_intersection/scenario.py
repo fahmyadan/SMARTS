@@ -73,11 +73,20 @@ north_exit = [i[0:9] + '0' for i in north_entry]
 all_exit = south_exit + west_exit + east_exit + north_exit
 """
 NUM_TRAFFIC_FLOWS = 100
+N_AGENTS = 5
+
+ego_missions = [
+    Mission(
+        route=RandomRoute()
+    ) for _ in range(N_AGENTS)]
+
+
 traffic = Traffic(
     flows=[
             Flow(
                 route=RandomRoute(),
                 rate=60 * 2,
+
                 actors={
                         TrafficActor(
                             name="car",
@@ -105,6 +114,7 @@ laner_actor = SocialAgentActor(
 gen_scenario(
     Scenario(
         traffic={"basic": traffic},
+        ego_missions=ego_missions,
         social_agent_missions={
             "all": ([laner_actor], [Mission(route=RandomRoute())])
         },
