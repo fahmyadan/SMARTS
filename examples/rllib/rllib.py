@@ -196,7 +196,8 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("rllib-example")
     parser.add_argument(
-        "scenario",
+        "--scenario",
+        default="scenario/loop",
         help="Scenario to run (see scenarios/ for some samples you can use)",
         type=str,
     )

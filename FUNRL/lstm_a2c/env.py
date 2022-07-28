@@ -28,7 +28,8 @@ class EnvWorker(Process):
         
         state, _, _, _ = self.env.step({'SingleAgent': [0,0,0]})
         #state = pre_process(state)
-        self.history = np.moveaxis(state, -1, 0)
+        self.history = state
+        #self.history = np.moveaxis(state, -1, 0)
 
     def run(self):
         super(EnvWorker, self).run()
