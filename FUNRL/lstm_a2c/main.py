@@ -72,21 +72,24 @@ def main():
     parser = default_argument_parser("single-agent-example")
     args = parser.parse_args()
     #env = gym.make(args.env_name)
-    num_episodes = 100
-    max_episode_steps = 100
+    num_episodes = 10
+    max_episode_steps = 10
     agent_spec = AgentSpec(
         interface=AgentInterface.from_type(
-            AgentType.LanerWithSpeed, max_episode_steps=max_episode_steps
+            AgentType.Laner, max_episode_steps=max_episode_steps
         ),
         agent_builder=ChaseViaPointsAgent,
     )
-    args.scenarios = ['/home/leandro/Leandro/SMARTS/scenarios/loop']
+    agent = agent_spec.build_agent()
+    args.scenarios = ['/home/tslab/Desktop/SMARTS/scenarios/loop']  #Relative file path To Do: Change to absolute
     args.horizon = 9
     args.save_path = './save_model/'
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
-    args.num_step = 400
+    args.num_step = 40
+    args.headless = True
+
 
     build_scenario(args.scenarios)
 
@@ -102,9 +105,13 @@ def main():
     torch.manual_seed(500)
 
     img_shape = 17
+    # Actions according to source code are 'keep lane' 'slow down' 'change lane-left/right' =4
     num_actions = agent_spec.interface.action_space.value
     print('image size:', img_shape)
     print('action size:', num_actions)
+    print("cuda is ", torch.cuda.is_available())
+    print(device)
+
 
     net = FuN(num_actions, args.horizon)
     optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
@@ -118,7 +125,7 @@ def main():
     child_conns = []
 
     for i in range(args.num_envs):
-        parent_conn, child_conn = Pipe()
+        parent_conn, child_conn = Pipe(duplex=True)  #both connections can be used to send and receive data
         worker = EnvWorker(args.env_name, args.render, child_conn , args, agent_spec)
         worker.start()
         workers.append(worker)
@@ -163,13 +170,15 @@ def main():
 
             for i, (parent_conn, action) in enumerate(zip(parent_conns, actions)):
                 parent_conn.send(action)
-                next_history, reward, dead, done = parent_conn.recv()
+                print('parent_conn started')
+                next_history, reward, crashed, done = parent_conn.recv()
+                print('parent_conn received')
                 next_histories.append(next_history)
                 rewards.append(reward)
-                masks.append(1 - dead)
+                masks.append(1 - crashed)
                 dones.append(done)
                 
-                if dead:
+                if crashed:
                     m_hx_mask = torch.ones(args.num_envs, num_actions * 16).to(device)
                     m_hx_mask[i, :] = m_hx_mask[i, :]*0
                     m_cx_mask = torch.ones(args.num_envs, num_actions * 16).to(device)

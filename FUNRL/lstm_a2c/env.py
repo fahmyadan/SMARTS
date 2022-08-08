@@ -18,6 +18,8 @@ class EnvWorker(Process):
             agent_specs={"SingleAgent": agent_spec},
             headless=args.headless,
             sumo_headless=True,
+
+
         )
         self.render = render
         self.child_conn = child_conn
@@ -37,39 +39,39 @@ class EnvWorker(Process):
         episode = 0
         steps = 0
         score = 0
-        life = 5
-        dead = False
+        collisions = 1 # -> Threshold for collisions; if veh has crashed once crashed ==True
+        crashed = False
 
         while True:
             if self.render:
                 self.env.render()
 
             action = self.child_conn.recv()
-            next_state, reward, done, info = self.env.step(action + 1)
-            
-            if life > info['ale.lives']:
-                dead = True
-                life = info['ale.lives']
+            next_state, reward, done, info = self.env.step({'SingleAgent':action + 1}) #HiwayEnv requires input to step function as dict
+            #env.step({'SingleAgent':action})[3]['SingleAgent']['env_obs'].events.collisions-> info (collisions) of step function
+            if collisions <=  len(info['SingleAgent']['env_obs'].events.collisions): #if length of list of collisions >1 crashed is true
+                crashed = True
+                collisions = info['SingleAgent']['env_obs'].events.collisions
 
-            next_state = pre_process(next_state)
-            self.history = np.moveaxis(next_state, -1, 0)
+            #next_state = pre_process(next_state)
+            #self.history = np.moveaxis(next_state, -1, 0)
 
             steps += 1
             score += reward
 
-            self.child_conn.send([deepcopy(self.history), reward, dead, done])
+            self.child_conn.send([deepcopy(self.history), reward, crashed, done])
 
-            if done and dead:
+            if done and crashed:
                 # print('{} episode | score: {:2f} | steps: {}'.format(
                 #     episode, score, steps
                 # ))
                 episode += 1
                 steps = 0
                 score = 0
-                dead = False
-                life = 5
+                crashed = False
+                collisions = 5
                 self.init_state()
 
-            if dead:
-                dead = False
+            if crashed:
+                crashed = False
                 self.init_state()
