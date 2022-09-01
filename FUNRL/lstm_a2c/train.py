@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from utils import get_grad_norm
+from FUNRL.lstm_a2c.utils import get_grad_norm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

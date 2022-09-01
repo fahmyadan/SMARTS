@@ -2,6 +2,7 @@ import os
 import gym
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 from torch.distributions import Categorical
@@ -10,11 +11,11 @@ import torch.nn.functional as F
 from tensorboardX import SummaryWriter
 from torch.multiprocessing import Pipe
 
-from model import FuN
-from utils import *
-from train import train_model
-from env import EnvWorker
-from memory import Memory
+from FUNRL.lstm_a2c.model import FuN
+from FUNRL.lstm_a2c.utils import *
+from FUNRL.lstm_a2c.train import train_model
+from FUNRL.lstm_a2c.env import EnvWorker
+from FUNRL.lstm_a2c.memory import Memory
 import pathlib
 
 from examples.argument_parser import default_argument_parser
@@ -27,6 +28,9 @@ from smarts.sstudio import build_scenario
 from smarts.zoo.agent_spec import AgentSpec
 from smarts.core.controllers import ActionSpaceType
 from smarts.core.utils.episodes import episodes
+
+import os
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--env_name', type=str, default="smarts.env:hiway-v0", help='')
@@ -71,16 +75,17 @@ class ChaseViaPointsAgent(Agent):
             1 if nearest.lane_index > obs.ego_vehicle_state.lane_index else -1,
         )
 
-def get_action(policies, num_actions):
-    m = Categorical(policies)
-    actions = m.sample()
-    actions = actions.data.cpu().numpy()
-    return actions
+def moving_average(a, n=10) :
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
 
 def main():
+    writer = SummaryWriter('logs')
+    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'loop')
     parser = default_argument_parser("feudal-learning")
     args = parser.parse_args()
-    args.scenarios = ['/home/tslab/Desktop/SMARTS/scenarios/loop']  #Relative file path To Do: Change to absolute
+    args.scenarios = [scenario_dir]  #Relative file path To Do: Change to absolute
     args.horizon = 9
     args.save_path = './save_model/'
     args.num_envs = 1
@@ -109,14 +114,14 @@ def main():
     env.seed(500)
     torch.manual_seed(500)
 
-    observation_size = agent_spec.interface.waypoints.lookahead
+    observation_size = 3 #agent_spec.interface.waypoints.lookahead
     num_actions = agent_spec.interface.action.value
     print('observation size:', observation_size)
     print('action size:', num_actions)
     print("cuda is ", torch.cuda.is_available())
     print(device)
 
-    net = FuN(observation_size,num_actions, args.horizon)
+    net = FuN(observation_size, num_actions, args.horizon)
     optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
 
     net.to(device)
@@ -127,35 +132,112 @@ def main():
     count = 0
     grad_norm = 0
 
-    histories = torch.zeros([args.num_envs, observation_size]).to(device)
+    state = torch.zeros([observation_size]).to(device)
 
-    m_hx = torch.zeros(args.num_envs, num_actions * 16).to(device)
-    m_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
+    m_hx = torch.zeros(num_actions * 16).to(device)
+    m_cx = torch.zeros(num_actions * 16).to(device)
     m_lstm = (m_hx, m_cx)
 
-    w_hx = torch.zeros(args.num_envs, num_actions * 16).to(device)
-    w_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
+    w_hx = torch.zeros(num_actions * 16).to(device)
+    w_cx = torch.zeros(num_actions * 16).to(device)
     w_lstm = (w_hx, w_cx)
 
-    goals_horizon = torch.zeros(args.num_envs, args.horizon + 1, num_actions * 16).to(device)
+    goals_horizon = torch.zeros(args.horizon + 1, num_actions * 16).to(device)
 
+    score_history = []
     for episode in episodes(n=max_episodes):
+        score = 0
+        memory = Memory()
         agent = agent_spec.build_agent()
         observation = env.reset()
+        state = torch.Tensor([observation.ego_vehicle_state.linear_acceleration]).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
 
         for i in range(args.num_step):
-            net_output = net.forward(histories.to(device), m_lstm, w_lstm, goals_horizon)
+            net_output = net.forward(state.to(device), m_lstm, w_lstm, goals_horizon)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
-            actions = get_action(policies, num_actions)
+            actions, policies, entropy = get_action(policies, num_actions)
 
+            episode = 0
+            steps = 0
+            score = 0
+            collisions = 1 # -> Threshold for collisions; if veh has crashed once crashed ==True
+            crashed = False
 
+            if args.render:
+                env.render()
 
+            next_state, reward, done, info = env.step({'SingleAgent': actions + 1})
 
+            if collisions <=  len(info['SingleAgent']['env_obs'].events.collisions): #if length of list of collisions >1 crashed is true
+                crashed = True
+                collisions = info['SingleAgent']['env_obs'].events.collisions
+
+            steps += 1
+            score += reward
+
+            if done and crashed:
+                # print('{} episode | score: {:2f} | steps: {}'.format(
+                #     episode, score, steps
+                # ))
+                episode += 1
+                steps = 0
+                score = 0
+                crashed = False
+                collisions = 5
+                break
+
+            if crashed:
+                crashed = False
+                break
+
+            next_state = torch.Tensor(next_state).to(device)
+            reward = np.asarray(reward)
+            mask = np.asarray([1])
+
+            memory.push(state, next_state,
+                        actions, reward, mask, goal,
+                        policies, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy)
+            state = next_state
+
+        if done:
+            entropy = - policies * torch.log(policies + 1e-5)
+            entropy = entropy.mean().data.cpu()
+            plcy = policies.tolist()[0]
+            print('global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} ! eps: {:.5f} | policy {}'.format(global_steps,
+                                                                                              score[i], entropy,
+                                                                                              grad_norm, eps, plcy))
+            if i == 0:
+                writer.add_scalar('log/score', score[i], global_steps)
+
+        score_history.append(score)
+
+        transitions = memory.sample()
+        loss, grad_norm = train_model(net, optimizer, transitions, args)
+
+        m_hx, m_cx = m_lstm
+        m_lstm = (m_hx.detach(), m_cx.detach())
+        w_hx, w_cx = w_lstm
+        w_lstm = (w_hx.detach(), w_cx.detach())
+        goals_horizon = goals_horizon.detach()
+        # avg_loss.append(loss.cpu().data)
+
+        if count % args.save_interval == 0:
+            ckpt_path = args.save_path + 'model.pt'
+            torch.save(net.state_dict(), ckpt_path)
+
+        plt.plot(range(args.episodes), score_history)
+        plt.plot(range(9, args.episodes), moving_average(score_history), color='green')
+        plt.title('Average agent reward per episode')
+        plt.xlabel('Episodes')
+        plt.ylabel('Reward')
+        plt.show()
 
 if __name__ == "__main__":
-    args.scenarios = ['/home/tslab/Desktop/SMARTS/scenarios/loop']
+    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'loop')
+
+    args.scenarios = [scenario_dir]
     build_scenario(args.scenarios)
 
     main()

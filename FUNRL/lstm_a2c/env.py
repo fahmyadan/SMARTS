@@ -2,7 +2,7 @@ import gym
 import torch
 import numpy as np
 from copy import deepcopy
-from utils import pre_process
+from FUNRL.lstm_a2c.utils import pre_process
 from torch.multiprocessing import Process
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
