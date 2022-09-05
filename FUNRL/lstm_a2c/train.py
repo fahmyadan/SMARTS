@@ -29,6 +29,7 @@ def train_model(net, optimizer, transition, args):
     m_values = torch.stack(transition.m_value).to(device)
     w_values_ext = torch.stack(transition.w_value_ext).to(device)
     w_values_int = torch.stack(transition.w_value_int).to(device)
+    entropy = torch.stack(transition.entropy).to(device)
     
     m_returns = get_returns(rewards, masks, args.m_gamma, m_values)
     w_returns = get_returns(rewards, masks, args.w_gamma, w_values_ext)
@@ -69,7 +70,7 @@ def train_model(net, optimizer, transition, args):
     w_loss_value_ext = F.mse_loss(w_values_ext.squeeze(), w_returns.detach())
     w_loss_value_int = F.mse_loss(w_values_int.squeeze(), returns_int.detach())
 
-    loss = w_loss + w_loss_value_ext + w_loss_value_int + m_loss + m_loss_value
+    loss = w_loss + w_loss_value_ext + w_loss_value_int + m_loss + m_loss_value - entropy.mean()*args.entropy_coef
     # TODO: Add entropy to loss for exploration
 
     optimizer.zero_grad()

@@ -40,10 +40,10 @@ parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
-parser.add_argument('--num_episodes', default=10, help='')
+parser.add_argument('--num_episodes', default=100, help='')
 parser.add_argument('--num_step', default=400, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
-parser.add_argument('--entropy_coef', default=0.01, help='')
+parser.add_argument('--entropy_coef', default=0.5, help='')
 parser.add_argument('--lr', default=7e-4, help='')
 parser.add_argument('--eps', default=1e-5, help='')
 parser.add_argument('--horizon', default=9, help='')
@@ -173,31 +173,19 @@ def main():
             steps += 1
             score += reward
 
-            if done:
-                break
-            # if done and crashed:
-            #     # print('{} episode | score: {:2f} | steps: {}'.format(
-            #     #     episode, score, steps
-            #     # ))
-            #     episode += 1
-            #     steps = 0
-            #     score = 0
-            #     crashed = False
-            #     collisions = 5
-            #     break
 
-            if crashed:
-                crashed = False
-                break
 
 
             next_state = torch.Tensor([next_state]).to(device)
-            reward = np.asarray(reward)
+            reward = np.asarray([reward])
             mask = np.asarray([1])
 
             memory.push(state, next_state,
                         actions, reward, mask, goal,
                         policies, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy)
+            if done:
+                break
+
             state = next_state
 
         if done:
@@ -226,12 +214,12 @@ def main():
             ckpt_path = args.save_path + 'model.pt'
             torch.save(net.state_dict(), ckpt_path)
 
-        plt.plot(range(args.episodes), score_history)
-        plt.plot(range(9, args.episodes), moving_average(score_history), color='green')
-        plt.title('Average agent reward per episode')
-        plt.xlabel('Episodes')
-        plt.ylabel('Reward')
-        plt.show()
+    plt.plot(range(args.num_episodes), score_history)
+    plt.plot(range(9, args.num_episodes), moving_average(score_history), color='green')
+    plt.title('Average agent reward per episode')
+    plt.xlabel('Episodes')
+    plt.ylabel('Reward')
+    plt.show()
 
 if __name__ == "__main__":
     scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'loop')
