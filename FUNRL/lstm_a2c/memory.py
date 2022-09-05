@@ -16,7 +16,7 @@ class Memory(object):
         self.position = 0
 
     def push(self, history, next_history, action, reward,
-             mask, goal, policy, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state):
+             mask, goal, policy, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy=None):
         """Saves a transition."""
         self.memory.append(Transition(history, next_history, action, reward, mask,
                            goal, policy, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state))

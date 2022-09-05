@@ -9,14 +9,11 @@ from torch.distributions import Categorical
 import torch.optim as optim
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
-from torch.multiprocessing import Pipe
 
 from FUNRL.lstm_a2c.model import FuN
 from FUNRL.lstm_a2c.utils import *
 from FUNRL.lstm_a2c.train import train_model
-from FUNRL.lstm_a2c.env import EnvWorker
 from FUNRL.lstm_a2c.memory import Memory
-import pathlib
 
 from examples.argument_parser import default_argument_parser
 from smarts.core.agent import Agent
@@ -43,6 +40,7 @@ parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
+parser.add_argument('--num_episodes', default=10, help='')
 parser.add_argument('--num_step', default=400, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.01, help='')
@@ -83,8 +81,8 @@ def moving_average(a, n=10) :
 def main():
     writer = SummaryWriter('logs')
     scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'loop')
-    parser = default_argument_parser("feudal-learning")
-    args = parser.parse_args()
+    # parser = default_argument_parser("feudal-learning")
+    # args = parser.parse_args()
     args.scenarios = [scenario_dir]  #Relative file path To Do: Change to absolute
     args.horizon = 9
     args.save_path = './save_model/'
@@ -94,10 +92,8 @@ def main():
     args.num_step = 40
     args.headless = True
 
-    max_episodes =10
-
-    agent_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.LaneWithContinuousSpeed,
-                                     max_episode_steps=max_episodes)
+    agent_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
+                                     max_episode_steps=args.num_step)
     agent_spec = AgentSpec(
         interface=agent_interface,
         agent_builder=ChaseViaPointsAgent,
@@ -115,7 +111,7 @@ def main():
     torch.manual_seed(500)
 
     observation_size = 3 #agent_spec.interface.waypoints.lookahead
-    num_actions = agent_spec.interface.action.value
+    num_actions = 4
     print('observation size:', observation_size)
     print('action size:', num_actions)
     print("cuda is ", torch.cuda.is_available())
@@ -134,18 +130,18 @@ def main():
 
     state = torch.zeros([observation_size]).to(device)
 
-    m_hx = torch.zeros(num_actions * 16).to(device)
-    m_cx = torch.zeros(num_actions * 16).to(device)
+    m_hx = torch.zeros(1, num_actions * 16).to(device)
+    m_cx = torch.zeros(1, num_actions * 16).to(device)
     m_lstm = (m_hx, m_cx)
 
-    w_hx = torch.zeros(num_actions * 16).to(device)
-    w_cx = torch.zeros(num_actions * 16).to(device)
+    w_hx = torch.zeros(1, num_actions * 16).to(device)
+    w_cx = torch.zeros(1, num_actions * 16).to(device)
     w_lstm = (w_hx, w_cx)
 
-    goals_horizon = torch.zeros(args.horizon + 1, num_actions * 16).to(device)
+    goals_horizon = torch.zeros(1, args.horizon + 1, num_actions * 16).to(device)
 
     score_history = []
-    for episode in episodes(n=max_episodes):
+    for episode in episodes(n=args.num_episodes):
         score = 0
         memory = Memory()
         agent = agent_spec.build_agent()
@@ -168,31 +164,34 @@ def main():
             if args.render:
                 env.render()
 
-            next_state, reward, done, info = env.step({'SingleAgent': actions + 1})
-
-            if collisions <=  len(info['SingleAgent']['env_obs'].events.collisions): #if length of list of collisions >1 crashed is true
-                crashed = True
-                collisions = info['SingleAgent']['env_obs'].events.collisions
+            observation, reward, done, info = env.step({'SingleAgent': actions + 1})
+            next_state = observation.ego_vehicle_state.linear_acceleration
+            # if collisions <=  len(info['SingleAgent']['env_obs'].events.collisions): #if length of list of collisions >1 crashed is true
+            #     crashed = True
+            #     collisions = info['SingleAgent']['env_obs'].events.collisions
 
             steps += 1
             score += reward
 
-            if done and crashed:
-                # print('{} episode | score: {:2f} | steps: {}'.format(
-                #     episode, score, steps
-                # ))
-                episode += 1
-                steps = 0
-                score = 0
-                crashed = False
-                collisions = 5
+            if done:
                 break
+            # if done and crashed:
+            #     # print('{} episode | score: {:2f} | steps: {}'.format(
+            #     #     episode, score, steps
+            #     # ))
+            #     episode += 1
+            #     steps = 0
+            #     score = 0
+            #     crashed = False
+            #     collisions = 5
+            #     break
 
             if crashed:
                 crashed = False
                 break
 
-            next_state = torch.Tensor(next_state).to(device)
+
+            next_state = torch.Tensor([next_state]).to(device)
             reward = np.asarray(reward)
             mask = np.asarray([1])
 
@@ -205,9 +204,9 @@ def main():
             entropy = - policies * torch.log(policies + 1e-5)
             entropy = entropy.mean().data.cpu()
             plcy = policies.tolist()[0]
-            print('global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} ! eps: {:.5f} | policy {}'.format(global_steps,
-                                                                                              score[i], entropy,
-                                                                                              grad_norm, eps, plcy))
+            print('global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(global_steps,
+                                                                                              score, entropy,
+                                                                                              grad_norm, plcy))
             if i == 0:
                 writer.add_scalar('log/score', score[i], global_steps)
 

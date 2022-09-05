@@ -21,7 +21,7 @@ class Manager(nn.Module):
     def forward(self, inputs):
         x, (hx, cx) = inputs
         x = F.relu(self.fc(x))
-        x = torch.squeeze(x)
+        x = torch.squeeze(x, 1)
         state = x
 
         hx, cx = self.lstm(x, (hx, cx))
