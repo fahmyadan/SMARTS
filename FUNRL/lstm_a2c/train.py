@@ -20,6 +20,7 @@ def get_returns(rewards, masks, gamma, values):
 
 
 def train_model(net, optimizer, transition, args):
+
     actions = torch.Tensor(transition.action).long().to(device)
     rewards = torch.Tensor(transition.reward).to(device)
     masks = torch.Tensor(transition.mask).to(device)
@@ -35,7 +36,12 @@ def train_model(net, optimizer, transition, args):
     w_returns = get_returns(rewards, masks, args.w_gamma, w_values_ext)
 
     intrinsic_rewards = torch.zeros_like(rewards).to(device)
-    
+
+    """
+    Compute the loss for training. We are computing cosine similarity between the GOAL set by manager and manager's 
+    observed state (M_STATE) 
+    """
+
     # todo: how to get intrinsic reward before 10 steps
     for i in range(args.horizon, len(rewards)):
         cos_sum = 0
