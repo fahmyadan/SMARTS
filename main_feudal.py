@@ -40,7 +40,7 @@ parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
-parser.add_argument('--num_episodes', default=100, help='')
+parser.add_argument('--num_episodes', default=500, help='')
 parser.add_argument('--num_step', default=400, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.5, help='')
@@ -73,6 +73,12 @@ class ChaseViaPointsAgent(Agent):
             1 if nearest.lane_index > obs.ego_vehicle_state.lane_index else -1,
         )
 
+"""
+
+Moving average function that computes the cummulative sum of a given array, a, and returns the average for every 10 data
+points/ arrays  
+
+"""
 def moving_average(a, n=10) :
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
@@ -89,15 +95,25 @@ def main():
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
-    args.num_step = 40
+    args.num_step = 100
     args.headless = True
-
+    """
+    Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
+    and specifies the actions the agent can take to impact the env 
+    """
     agent_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
                                      max_episode_steps=args.num_step)
     agent_spec = AgentSpec(
         interface=agent_interface,
         agent_builder=ChaseViaPointsAgent,
     )
+    """
+    Make the HiwayEnv environment. 
+    Args: 
+    scenario: Sequence[str]
+    agent_specs: Dict[str, AgentSpec 
+    headless: bool 
+    """
     env = gym.make(
         "smarts.env:hiway-v0",
         scenarios=args.scenarios,
@@ -106,7 +122,7 @@ def main():
         sumo_headless=True,
     )
 
-    env = SingleAgent(env=env)
+    env = SingleAgent(env=env) #Wrapper for gym.env change output of step and reset
     env.seed(500)
     torch.manual_seed(500)
 
@@ -117,6 +133,7 @@ def main():
     print("cuda is ", torch.cuda.is_available())
     print(device)
 
+    #Instantiate the FuN model object (Creating the percept, manager and worker in the __init__)
     net = FuN(observation_size, num_actions, args.horizon)
     optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
 
@@ -127,9 +144,11 @@ def main():
     score = np.zeros(args.num_envs)
     count = 0
     grad_norm = 0
-
+    #Initialize state -> zeros torch.Size([3])
     state = torch.zeros([observation_size]).to(device)
 
+    #Initialize hidden and cell state of Manager and Worker
+    #torch.size([1,3*16])
     m_hx = torch.zeros(1, num_actions * 16).to(device)
     m_cx = torch.zeros(1, num_actions * 16).to(device)
     m_lstm = (m_hx, m_cx)
@@ -144,12 +163,23 @@ def main():
     for episode in episodes(n=args.num_episodes):
         score = 0
         memory = Memory()
+        #Build the agent @ the start of each episode
         agent = agent_spec.build_agent()
+        #Reset the env @ start of each episode and log the observations. observation contains all observations in SMARTS
         observation = env.reset()
+        """
+        specify the state as a subset of observations to be passed through the model; 
+        in this case we ar only using linear acceleration
+        
+        """
         state = torch.Tensor([observation.ego_vehicle_state.linear_acceleration]).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
-
+        """
+        In each episode, we step (take actions) the environment. The agent model (FuN) receives the most recent 
+        state+histories and uses the NNs to estimate the best action to take given the new state. 
+         
+        """
         for i in range(args.num_step):
             net_output = net.forward(state.to(device), m_lstm, w_lstm, goals_horizon)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
@@ -163,31 +193,32 @@ def main():
 
             if args.render:
                 env.render()
-
+            #Step the environment by taking the actions predicted by FuN model.
             observation, reward, done, info = env.step({'SingleAgent': actions + 1})
+            #Record the new state after taking an action
             next_state = observation.ego_vehicle_state.linear_acceleration
-            # if collisions <=  len(info['SingleAgent']['env_obs'].events.collisions): #if length of list of collisions >1 crashed is true
-            #     crashed = True
-            #     collisions = info['SingleAgent']['env_obs'].events.collisions
-
+            #Increment steps and sum the reward
             steps += 1
             score += reward
 
 
 
-
+            #Pass the new state as a tensor to GPU
             next_state = torch.Tensor([next_state]).to(device)
             reward = np.asarray([reward])
             mask = np.asarray([1])
-
+            """
+            Memory function that saves the transition from one state to the next, logging the states, actions, rewards 
+            and network weights each time.  
+            """
             memory.push(state, next_state,
                         actions, reward, mask, goal,
                         policies, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy)
             if done:
                 break
-
+            #End of step loop, assign the state to be passed to FuN as the most recent state and repeat loop.
             state = next_state
-
+        #If done criteria == True, calculate entropy -> H(x) = -P * log(P)
         if done:
             entropy = - policies * torch.log(policies + 1e-5)
             entropy = entropy.mean().data.cpu()
@@ -199,6 +230,9 @@ def main():
                 writer.add_scalar('log/score', score[i], global_steps)
 
         score_history.append(score)
+        """
+        For each episode, compute the loss as a cosine similarity between 2 vectors (m_state & goal)
+        """
 
         transitions = memory.sample()
         loss, grad_norm = train_model(net, optimizer, transitions, args)
