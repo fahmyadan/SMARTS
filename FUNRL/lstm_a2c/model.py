@@ -20,10 +20,13 @@ class Manager(nn.Module):
 
     def forward(self, inputs):
         x, (hx, cx) = inputs
+        x_0 = self.fc(x)
         x = F.relu(self.fc(x))
-        x = torch.squeeze(x, 1)
+        x_1 = x
+        #x = torch.squeeze(x, 1)
+        x = torch.squeeze(x)
         state = x
-
+        #print(f'manager lstm. Input size {x.size()}')
         hx, cx = self.lstm(x, (hx, cx))
 
         goal = cx
@@ -32,6 +35,7 @@ class Manager(nn.Module):
 
         goal_norm = torch.norm(goal, p=2, dim=1).unsqueeze(1)
         goal = goal / goal_norm.detach()
+        #print(f'manager complete. New state {state.size()}')
         return goal, (hx, cx), value, state
 
 
@@ -58,8 +62,11 @@ class Worker(nn.Module):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
 
     def forward(self, inputs):
+        #print('passing through worker')
         x, (hx, cx), goals = inputs
-        x = torch.squeeze(x, 1)
+        x = torch.squeeze(x)
+        #x = torch.squeeze(x, 1)
+        #print('worker input size ', x.size())
         hx, cx = self.lstm(x, (hx, cx))
 
         value_ext = F.relu(self.fc_critic1(hx))
@@ -79,7 +86,7 @@ class Worker(nn.Module):
         policy = torch.bmm(worker_embed, goal_embed)
         policy = policy.squeeze(-1)
         policy = F.softmax(policy, dim=-1)
-
+        #print('completed worker')
         return policy, (hx, cx), value_ext, value_int
 
 
@@ -116,7 +123,7 @@ class FuN(nn.Module):
 
     def forward(self, x, m_lstm, w_lstm, goals_horizon):
         percept_z = self.percept(x)
-
+        #print(f'size of percept_z {percept_z.size()}')
         m_inputs = (percept_z, m_lstm)
         goal, m_lstm, m_value, m_state = self.manager(m_inputs)
 
