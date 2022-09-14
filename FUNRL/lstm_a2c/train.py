@@ -3,14 +3,22 @@ import torch.nn.functional as F
 from FUNRL.lstm_a2c.utils import get_grad_norm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+"""
+Note change: returns is now torch.size(28,3) and not (28,1). This is to aide with the appending of running returns in
+line 22 so that the dimensions match up. 
+"""
+
 
 
 def get_returns(rewards, masks, gamma, values):
-    returns = torch.zeros_like(rewards)
+    #returns = torch.zeros_like(rewards)
+    returns = torch.zeros(len(rewards), 3)
     running_returns = values[-1].squeeze()
 
     for t in reversed(range(0, len(rewards)-1)):
+        #print('check training')
         running_returns = rewards[t] + gamma * running_returns * masks[t]
+        #print(f'running returns = {running_returns}')
         returns[t] = running_returns
 
     if returns.std() != 0:
@@ -35,7 +43,12 @@ def train_model(net, optimizer, transition, args):
     m_returns = get_returns(rewards, masks, args.m_gamma, m_values)
     w_returns = get_returns(rewards, masks, args.w_gamma, w_values_ext)
 
-    intrinsic_rewards = torch.zeros_like(rewards).to(device)
+    """
+    Note change: add a second dimension (3) to intrinsic rewards  to match dimensions of line 61 
+    (intrinsic_rewards[i] = intrinsic_reward.detach())
+    """
+    #intrinsic_rewards = torch.zeros_like(rewards).to(device)
+    intrinsic_rewards = torch.zeros(len(rewards), 3).to(device)
 
     """
     Compute the loss for training. We are computing cosine similarity between the GOAL set by manager and manager's 
@@ -58,23 +71,25 @@ def train_model(net, optimizer, transition, args):
     w_loss = torch.zeros_like(m_returns).to(device)
 
     # todo: how to update manager near end state
+
+    # Note change: Move return values(e.g. returns_int, w/m_returns etc) to the GPU
     for i in range(0, len(rewards)-args.horizon):
-        m_advantage = m_returns[i] - m_values[i].squeeze(-1)
+        m_advantage = m_returns[i].to(device) - m_values[i].squeeze(-1)
         alpha = m_states[i + args.horizon] - m_states[i]
         beta = goals[i]
         cosine_sim = F.cosine_similarity(alpha.detach(), beta)
         m_loss[i] = - m_advantage * cosine_sim
 
         log_policy = torch.log(policies[i] + 1e-5)
-        w_advantage = w_returns[i] + returns_int[i] - w_values_ext[i].squeeze(-1) - w_values_int[i].squeeze(-1)
+        w_advantage = w_returns[i].to(device) + returns_int[i].to(device) - w_values_ext[i].squeeze(-1) - w_values_int[i].squeeze(-1)
         log_policy = log_policy.gather(-1, actions[i].unsqueeze(-1))
         w_loss[i] = - w_advantage * log_policy.squeeze(-1)
     
     m_loss = m_loss.mean()
     w_loss = w_loss.mean()
-    m_loss_value = F.mse_loss(m_values.squeeze(), m_returns.detach())
-    w_loss_value_ext = F.mse_loss(w_values_ext.squeeze(), w_returns.detach())
-    w_loss_value_int = F.mse_loss(w_values_int.squeeze(), returns_int.detach())
+    m_loss_value = F.mse_loss(m_values.squeeze(), m_returns.detach().to(device))
+    w_loss_value_ext = F.mse_loss(w_values_ext.squeeze(), w_returns.detach().to(device))
+    w_loss_value_int = F.mse_loss(w_values_int.squeeze(), returns_int.detach().to(device))
 
     loss = w_loss + w_loss_value_ext + w_loss_value_int + m_loss + m_loss_value - entropy.mean()*args.entropy_coef
     # TODO: Add entropy to loss for exploration
