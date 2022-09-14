@@ -40,7 +40,7 @@ parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
-parser.add_argument('--num_episodes', default=500, help='')
+parser.add_argument('--num_episodes', default=1000, help='')
 parser.add_argument('--num_step', default=400, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.5, help='')
@@ -96,7 +96,7 @@ def main():
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
     args.num_step = 100
-    args.headless = True
+    args.headless = False
     """
     Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
     and specifies the actions the agent can take to impact the env 
@@ -149,15 +149,17 @@ def main():
 
     #Initialize hidden and cell state of Manager and Worker
     #torch.size([1,3*16])
-    m_hx = torch.zeros(1, num_actions * 16).to(device)
-    m_cx = torch.zeros(1, num_actions * 16).to(device)
+    #changed from : m_hx = torch.zeros(1, num_actions * 16).to(device)
+    # same m_cx and worker hidden and cell states
+    m_hx = torch.zeros(observation_size, num_actions * 16).to(device)
+    m_cx = torch.zeros(observation_size, num_actions * 16).to(device)
     m_lstm = (m_hx, m_cx)
 
-    w_hx = torch.zeros(1, num_actions * 16).to(device)
-    w_cx = torch.zeros(1, num_actions * 16).to(device)
+    w_hx = torch.zeros(observation_size ,num_actions * 16).to(device)
+    w_cx = torch.zeros(observation_size, num_actions * 16).to(device)
     w_lstm = (w_hx, w_cx)
-
-    goals_horizon = torch.zeros(1, args.horizon + 1, num_actions * 16).to(device)
+    #Used to be goals_horizon = torch.zeros(1, args.horizon + 1, num_actions * 16).to(device)
+    goals_horizon = torch.zeros(observation_size, args.horizon + 1, num_actions * 16).to(device)
 
     score_history = []
     for episode in episodes(n=args.num_episodes):
@@ -172,9 +174,12 @@ def main():
         in this case we ar only using linear acceleration
         
         """
-        state = torch.Tensor([observation.ego_vehicle_state.linear_acceleration]).to(device)
+        state_rep = [observation.ego_vehicle_state.linear_velocity,observation.ego_vehicle_state.position, observation.ego_vehicle_state.linear_acceleration]
+        state = torch.Tensor(state_rep).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
+        #print(f'count = {count}')
+        steps = 0
         """
         In each episode, we step (take actions) the environment. The agent model (FuN) receives the most recent 
         state+histories and uses the NNs to estimate the best action to take given the new state. 
@@ -186,7 +191,7 @@ def main():
             actions, policies, entropy = get_action(policies, num_actions)
 
             episode = 0
-            steps = 0
+            #steps = 0
             score = 0
             collisions = 1 # -> Threshold for collisions; if veh has crashed once crashed ==True
             crashed = False
@@ -196,9 +201,12 @@ def main():
             #Step the environment by taking the actions predicted by FuN model.
             observation, reward, done, info = env.step({'SingleAgent': actions + 1})
             #Record the new state after taking an action
-            next_state = observation.ego_vehicle_state.linear_acceleration
+            #next_state = observation.ego_vehicle_state.linear_acceleration
+            next_state = [observation.ego_vehicle_state.linear_velocity,observation.ego_vehicle_state.position, observation.ego_vehicle_state.linear_acceleration]
+
             #Increment steps and sum the reward
             steps += 1
+            #print(f'steps = {steps}')
             score += reward
 
 
@@ -216,18 +224,19 @@ def main():
                         policies, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy)
             if done:
                 break
-            #End of step loop, assign the state to be passed to FuN as the most recent state and repeat loop.
+            #End of step loop, assign the state to be passed to FuN(manager and worker) as the most recent state and repeat loop.
             state = next_state
+            #print('new step')
         #If done criteria == True, calculate entropy -> H(x) = -P * log(P)
         if done:
             entropy = - policies * torch.log(policies + 1e-5)
             entropy = entropy.mean().data.cpu()
             plcy = policies.tolist()[0]
-            print('global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(global_steps,
-                                                                                              score, entropy,
+            print('global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(steps,
+                                                                                             score, entropy,
                                                                                               grad_norm, plcy))
             if i == 0:
-                writer.add_scalar('log/score', score[i], global_steps)
+                writer.add_scalar('log/score', score[i], steps)
 
         score_history.append(score)
         """
@@ -235,6 +244,7 @@ def main():
         """
 
         transitions = memory.sample()
+        #print('training model called')
         loss, grad_norm = train_model(net, optimizer, transitions, args)
 
         m_hx, m_cx = m_lstm
