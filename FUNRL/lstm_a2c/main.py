@@ -24,6 +24,7 @@ from smarts.core.utils.episodes import episodes
 from smarts.env.wrappers.single_agent import SingleAgent
 from smarts.sstudio import build_scenario
 from smarts.zoo.agent_spec import AgentSpec
+from smarts.core.controllers import ActionSpaceType
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--env_name', type=str, default="smarts.env:hiway-v0", help='')
@@ -74,21 +75,24 @@ def main():
     #env = gym.make(args.env_name)
     num_episodes = 10
     max_episode_steps = 10
+    #interface = AgentInterface(debug=True, max_episode_steps=max_episode_steps, action=ActionSpaceType.LaneWithContinuousSpeed )
+
     agent_spec = AgentSpec(
         interface=AgentInterface.from_type(
-            AgentType.Laner, max_episode_steps=max_episode_steps
+            AgentType.LanerWithSpeed, max_episode_steps=max_episode_steps
         ),
         agent_builder=ChaseViaPointsAgent,
     )
     agent = agent_spec.build_agent()
-    args.scenarios = ['/home/tslab/Desktop/SMARTS/scenarios/loop']  #Relative file path To Do: Change to absolute
+    args.scenarios = [str(pathlib.Path(__file__).absolute().parents[2] / "scenarios" / "loop")]  #Relative file path To Do: Change to absolute
+    print('scenarios',args.scenarios)
     args.horizon = 9
     args.save_path = './save_model/'
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
     args.num_step = 40
-    args.headless = True
+    args.headless = False
 
 
     build_scenario(args.scenarios)
@@ -104,16 +108,14 @@ def main():
     env.seed(500)
     torch.manual_seed(500)
 
-    img_shape = 17
+    observation_size  = agent_spec.interface.waypoints.lookahead
     # Actions according to source code are 'keep lane' 'slow down' 'change lane-left/right' =4
-    num_actions = agent_spec.interface.action_space.value
-    print('image size:', img_shape)
+    num_actions = agent_spec.interface.action.value
+    print('observation size:', observation_size)
     print('action size:', num_actions)
     print("cuda is ", torch.cuda.is_available())
     print(device)
-
-
-    net = FuN(num_actions, args.horizon)
+    net = FuN(observation_size=observation_size, num_actions=num_actions, horizon=args.horizon)
     optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
     writer = SummaryWriter('logs')
 

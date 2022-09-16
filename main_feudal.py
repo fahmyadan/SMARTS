@@ -95,7 +95,7 @@ def main():
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
-    args.num_step = 100
+    args.num_step = 500
     args.headless = False
     """
     Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
@@ -178,7 +178,8 @@ def main():
         state = torch.Tensor(state_rep).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
-        #print(f'count = {count}')
+        #if count == 2:
+         #   print(f'count = {count}, break ')
         steps = 0
         """
         In each episode, we step (take actions) the environment. The agent model (FuN) receives the most recent 
@@ -188,8 +189,16 @@ def main():
         for i in range(args.num_step):
             net_output = net.forward(state.to(device), m_lstm, w_lstm, goals_horizon)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
-            actions, policies, entropy = get_action(policies, num_actions)
 
+            pol = policies[0]
+            actions, policies, entropy = get_action(pol, num_actions)
+            """
+            Actions available to ActionSpaceType.Lane are [keep_lane, slow_down, change_lane_left, change_lane_right]
+            see smarts.core.controllers.__init__  
+            """
+            lane_actions = {0:'keep_lane', 1: 'slow_down', 2: 'change_lane_left', 3:'change_lane_right'}
+
+            #print(f'action taken is {lane_actions[actions]}')
             episode = 0
             #steps = 0
             score = 0
@@ -199,7 +208,8 @@ def main():
             if args.render:
                 env.render()
             #Step the environment by taking the actions predicted by FuN model.
-            observation, reward, done, info = env.step({'SingleAgent': actions + 1})
+            #observation, reward, done, info = env.step({'SingleAgent': actions})
+            observation, reward, done, info = env.step(lane_actions[actions])
             #Record the new state after taking an action
             #next_state = observation.ego_vehicle_state.linear_acceleration
             next_state = [observation.ego_vehicle_state.linear_velocity,observation.ego_vehicle_state.position, observation.ego_vehicle_state.linear_acceleration]
@@ -234,7 +244,7 @@ def main():
             plcy = policies.tolist()[0]
             print('global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(steps,
                                                                                              score, entropy,
-                                                                                              grad_norm, plcy))
+                                                                                              grad_norm, pol))
             if i == 0:
                 writer.add_scalar('log/score', score[i], steps)
 

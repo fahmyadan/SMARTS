@@ -1251,6 +1251,7 @@ class SMARTS:
                     vehicle.id
                 )
                 # TODO: Support performing batched actions
+                #print(f'we are performing action {vehicle_action}, on agent {agent_id}')
                 Controllers.perform_action(
                     self,
                     agent_id,
@@ -1261,6 +1262,7 @@ class SMARTS:
                     agent_interface.action_space,
                     agent_interface.vehicle_type,
                 )
+                #print('action completed')
 
     def _sync_vehicles_to_renderer(self):
         assert self._renderer

@@ -16,6 +16,7 @@ def get_action(policies, num_actions):
     m = Categorical(policies)
     actions = m.sample()
     actions = actions.data.cpu().numpy()
+    actions = int(actions)
     return actions, policies, m.entropy()
 
 
