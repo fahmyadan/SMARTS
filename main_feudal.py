@@ -34,16 +34,16 @@ parser.add_argument('--env_name', type=str, default="smarts.env:hiway-v0", help=
 parser.add_argument('--load_model', type=str, default=None)
 parser.add_argument('--save_path', default='./save_model/', help='')
 parser.add_argument('--render', default=False, action="store_true")
-parser.add_argument('--m_gamma', default=0.999, help='')
-parser.add_argument('--w_gamma', default=0.99, help='')
+parser.add_argument('--m_gamma', default=0.1, help='')
+parser.add_argument('--w_gamma', default=0.1, help='')
 parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
-parser.add_argument('--num_episodes', default=1000, help='')
+parser.add_argument('--num_episodes', default=20, help='')
 parser.add_argument('--num_step', default=400, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
-parser.add_argument('--entropy_coef', default=0.5, help='')
+parser.add_argument('--entropy_coef', default=0.01, help='')
 parser.add_argument('--lr', default=7e-4, help='')
 parser.add_argument('--eps', default=1e-5, help='')
 parser.add_argument('--horizon', default=9, help='')
@@ -95,8 +95,8 @@ def main():
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
-    args.num_step = 500
-    args.headless = False
+    args.num_step = 100
+    args.headless = True
     """
     Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
     and specifies the actions the agent can take to impact the env 
@@ -162,6 +162,7 @@ def main():
     goals_horizon = torch.zeros(observation_size, args.horizon + 1, num_actions * 16).to(device)
 
     score_history = []
+    loss_history = []
     for episode in episodes(n=args.num_episodes):
         score = 0
         memory = Memory()
@@ -201,7 +202,6 @@ def main():
             #print(f'action taken is {lane_actions[actions]}')
             episode = 0
             #steps = 0
-            score = 0
             collisions = 1 # -> Threshold for collisions; if veh has crashed once crashed ==True
             crashed = False
 
@@ -256,7 +256,7 @@ def main():
         transitions = memory.sample()
         #print('training model called')
         loss, grad_norm = train_model(net, optimizer, transitions, args)
-
+        loss_history.append(loss.item())
         m_hx, m_cx = m_lstm
         m_lstm = (m_hx.detach(), m_cx.detach())
         w_hx, w_cx = w_lstm
@@ -273,6 +273,11 @@ def main():
     plt.title('Average agent reward per episode')
     plt.xlabel('Episodes')
     plt.ylabel('Reward')
+    plt.show()
+    plt.plot(range(args.num_episodes), loss_history)
+    plt.title('Losses per episode')
+    plt.xlabel('Episodes')
+    plt.ylabel('Loss')
     plt.show()
 
 if __name__ == "__main__":
