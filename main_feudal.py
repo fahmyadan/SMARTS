@@ -101,12 +101,15 @@ OBSERVATION_SPACE = gym.spaces.Dict(
     }
 )
 
-def observation_adapter(env_obs):
+ttc_threshold = 1000
 
+def observation_adapter(env_obs):
     return lane_ttc_observation_adapter.transform(env_obs)
 
 
 def reward_adapter(env_obs, env_reward):
+    adapt_obs = observation_adapter(env_obs)
+    obs_ttc = adapt_obs['ego_ttc']
     return env_reward
 
 def main():
@@ -127,7 +130,7 @@ def main():
     and specifies the actions the agent can take to impact the env 
     """
     agent_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
-                                     max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=10))
+                                     max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
     agent_spec = AgentSpec(
         interface=agent_interface,
         agent_builder=ChaseViaPointsAgent,
