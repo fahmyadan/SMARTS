@@ -11,8 +11,8 @@ line 22 so that the dimensions match up.
 
 
 def get_returns(rewards, masks, gamma, values):
-    #returns = torch.zeros_like(rewards)
-    returns = torch.zeros(len(rewards), 3)
+    returns = torch.zeros_like(rewards)
+    #returns = torch.zeros(len(rewards), 3)
     running_returns = values[-1].squeeze()
 
     for t in reversed(range(0, len(rewards)-1)):
@@ -82,8 +82,9 @@ def train_model(net, optimizer, transition, args):
 
         log_policy = torch.log(policies[i] + 1e-5)
         w_advantage = w_returns[i].to(device) + returns_int[i].to(device) - w_values_ext[i].squeeze(-1) - w_values_int[i].squeeze(-1)
-        #Gather method problems
-        log_policy = log_policy.gather(-1, actions[i].unsqueeze(-1))
+        action_inst = actions[i].item()
+        #log_policy = log_policy.gather(-1, actions[i].unsqueeze(-1))
+        log_policy = log_policy[0][action_inst]
         w_loss[i] = - w_advantage * log_policy.squeeze(-1)
     
     m_loss = m_loss.mean()
