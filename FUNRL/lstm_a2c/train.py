@@ -11,8 +11,8 @@ line 22 so that the dimensions match up.
 
 
 def get_returns(rewards, masks, gamma, values):
-    #returns = torch.zeros_like(rewards)
-    returns = torch.zeros(len(rewards), 3)
+    returns = torch.zeros_like(rewards)
+    #returns = torch.zeros(len(rewards), 3)
     running_returns = values[-1].squeeze()
 
     for t in reversed(range(0, len(rewards)-1)):
@@ -30,7 +30,6 @@ def get_returns(rewards, masks, gamma, values):
 def train_model(net, optimizer, transition, args):
 
     actions = torch.Tensor(transition.action).long().to(device)
-    rewards = torch.Tensor(transition.reward).to(device)
     masks = torch.Tensor(transition.mask).to(device)
     goals = torch.stack(transition.goal).to(device)
     policies = torch.stack(transition.policy).to(device)
@@ -39,16 +38,18 @@ def train_model(net, optimizer, transition, args):
     w_values_ext = torch.stack(transition.w_value_ext).to(device)
     w_values_int = torch.stack(transition.w_value_int).to(device)
     entropy = torch.stack(transition.entropy).to(device)
+    w_rewards = torch.Tensor(transition.w_reward).to(device)
+    m_rewards = torch.Tensor(transition.m_reward).to(device)
     
-    m_returns = get_returns(rewards, masks, args.m_gamma, m_values)
-    w_returns = get_returns(rewards, masks, args.w_gamma, w_values_ext)
+    m_returns = get_returns(m_rewards, masks, args.m_gamma, m_values)
+    w_returns = get_returns(w_rewards, masks, args.w_gamma, w_values_ext)
 
     """
     Note change: add a second dimension (3) to intrinsic rewards  to match dimensions of line 61 
     (intrinsic_rewards[i] = intrinsic_reward.detach())
     """
-    #intrinsic_rewards = torch.zeros_like(rewards).to(device)
-    intrinsic_rewards = torch.zeros(len(rewards), 3).to(device)
+    intrinsic_rewards = torch.zeros_like(rewards).to(device)
+    #intrinsic_rewards = torch.zeros(len(rewards), 3).to(device)
 
     """
     Compute the loss for training. We are computing cosine similarity between the GOAL set by manager and manager's 

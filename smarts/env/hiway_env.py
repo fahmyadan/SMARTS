@@ -227,6 +227,7 @@ class HiWayEnv(gym.Env):
             Tuple[ Dict[str, Observation], Dict[str, float], Dict[str, bool], Dict[str, Any] ]:
                 Observations, rewards, dones, and infos for active agents.
         """
+        print(f'agent_actions are : {agent_actions}')
         agent_actions = {
             agent_id: self._agent_specs[agent_id].action_adapter(action)
             for agent_id, action in agent_actions.items()

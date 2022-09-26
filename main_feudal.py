@@ -17,7 +17,7 @@ from FUNRL.lstm_a2c.memory import Memory
 
 from examples.argument_parser import default_argument_parser
 from smarts.core.agent import Agent
-from smarts.core.agent_interface import AgentInterface, AgentType
+from smarts.core.agent_interface import AgentInterface, AgentType, NeighborhoodVehicles
 from smarts.core.sensors import Observation
 from smarts.core.utils.episodes import episodes
 from smarts.env.wrappers.single_agent import SingleAgent
@@ -39,8 +39,8 @@ parser.add_argument('--w_gamma', default=0.1, help='')
 parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
-parser.add_argument('--num_envs', default=12, help='')
-parser.add_argument('--num_episodes', default=20, help='')
+parser.add_argument('--num_envs', default=1, help='')
+parser.add_argument('--num_episodes', default=5000, help='')
 parser.add_argument('--num_step', default=400, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.01, help='')
@@ -84,29 +84,46 @@ def moving_average(a, n=10) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
+def reward_adapter(env_obs, env_reward):
+    agent_obs = [env_obs.ego_vehicle_state.linear_velocity,env_obs.ego_vehicle_state.position,
+                 env_obs.ego_vehicle_state.linear_acceleration]
+    return env_reward
+
+"""
+Multiagent architecture (worker number) 
+"""
+n_workers = 5
+
+worker_id = [f'worker {i}' for i in range(n_workers)]
+
+
+
 def main():
     writer = SummaryWriter('logs')
-    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'loop')
+    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'intersections/4lane')
     # parser = default_argument_parser("feudal-learning")
     # args = parser.parse_args()
     args.scenarios = [scenario_dir]  #Relative file path To Do: Change to absolute
     args.horizon = 9
-    args.save_path = './save_model/'
+    args.save_path = './Plots/'
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
-    args.num_step = 100
+    args.num_step = 500
     args.headless = True
     """
     Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
     and specifies the actions the agent can take to impact the env 
     """
-    agent_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
-                                     max_episode_steps=args.num_step)
-    agent_spec = AgentSpec(
+    agent_interface = AgentInterface(debug=True, waypoints=True,accelerometer=True, lidar=True, action=ActionSpaceType.Lane,
+                                     max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=10))
+    agent_spec = {agent_id: AgentSpec(
         interface=agent_interface,
         agent_builder=ChaseViaPointsAgent,
-    )
+        reward_adapter=reward_adapter
+    ) for agent_id in worker_id}
+
+
     """
     Make the HiwayEnv environment. 
     Args: 
@@ -117,16 +134,16 @@ def main():
     env = gym.make(
         "smarts.env:hiway-v0",
         scenarios=args.scenarios,
-        agent_specs={"SingleAgent": agent_spec},
+        agent_specs=agent_spec,
         headless=args.headless,
         sumo_headless=True,
     )
 
-    env = SingleAgent(env=env) #Wrapper for gym.env change output of step and reset
+    #env = SingleAgent(env=env) #Wrapper for gym.env change output of step and reset
     env.seed(500)
     torch.manual_seed(500)
 
-    observation_size = 3 #agent_spec.interface.waypoints.lookahead
+    observation_size = 12 #agent_spec.interface.waypoints.lookahead
     num_actions = 4
     print('observation size:', observation_size)
     print('action size:', num_actions)
@@ -135,7 +152,7 @@ def main():
 
     #Instantiate the FuN model object (Creating the percept, manager and worker in the __init__)
     net = FuN(observation_size, num_actions, args.horizon)
-    optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
+    optimizer = optim.RMSprop(net.parameters(), lr=0.00005, eps=0.01)
 
     net.to(device)
     net.train()
@@ -151,23 +168,34 @@ def main():
     #torch.size([1,3*16])
     #changed from : m_hx = torch.zeros(1, num_actions * 16).to(device)
     # same m_cx and worker hidden and cell states
-    m_hx = torch.zeros(observation_size, num_actions * 16).to(device)
-    m_cx = torch.zeros(observation_size, num_actions * 16).to(device)
+    m_hx = torch.zeros(args.num_envs, num_actions * 16).to(device)
+    m_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
     m_lstm = (m_hx, m_cx)
 
-    w_hx = torch.zeros(observation_size ,num_actions * 16).to(device)
-    w_cx = torch.zeros(observation_size, num_actions * 16).to(device)
+    w_hx = torch.zeros(args.num_envs,num_actions * 16).to(device)
+    w_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
     w_lstm = (w_hx, w_cx)
     #Used to be goals_horizon = torch.zeros(1, args.horizon + 1, num_actions * 16).to(device)
-    goals_horizon = torch.zeros(observation_size, args.horizon + 1, num_actions * 16).to(device)
+    goals_horizon = torch.zeros(args.num_envs, args.horizon + 1, num_actions * 16).to(device)
 
     score_history = []
     loss_history = []
+
+    #Potting
+    fig1,ax1 = plt.subplots()
+    fig2,ax2 = plt.subplots()
+
+    ax1.set(xlabel='Episode', ylabel='Reward', title='Reward per episode')
+    ax2.set(xlabel='Episode', ylabel='Loss', title='Loss per episode')
+
+
     for episode in episodes(n=args.num_episodes):
-        score = 0
+        worker_score = 0
+        manager_score = 0
+        total_score = 0
         memory = Memory()
         #Build the agent @ the start of each episode
-        agent = agent_spec.build_agent()
+        agent = {agent_ids: agent_spec.build_agent() for agent_ids, agent_spec in agent_spec.items()}
         #Reset the env @ start of each episode and log the observations. observation contains all observations in SMARTS
         observation = env.reset()
         """
@@ -175,8 +203,18 @@ def main():
         in this case we ar only using linear acceleration
         
         """
-        state_rep = [observation.ego_vehicle_state.linear_velocity,observation.ego_vehicle_state.position, observation.ego_vehicle_state.linear_acceleration]
-        state = torch.Tensor(state_rep).to(device)
+        full_state = [
+                      [observation[worker_ids].ego_vehicle_state.linear_velocity for worker_ids in worker_id ],
+                      [observation[worker_ids].ego_vehicle_state.position for worker_ids in worker_id ],
+                      [observation[worker_ids].ego_vehicle_state.linear_acceleration for worker_ids in worker_id],
+                      [observation[worker_ids].ego_vehicle_state.linear_jerk for worker_ids in worker_id]
+                      ]
+
+
+                      #o, observation[worker_ids].ego_vehicle_state.linear_jerk
+
+        state_tensor = torch.Tensor(full_state)
+        state = state_tensor.view(1, observation_size).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
         #if count == 2:
@@ -190,7 +228,6 @@ def main():
         for i in range(args.num_step):
             net_output = net.forward(state.to(device), m_lstm, w_lstm, goals_horizon)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
-
             pol = policies[0]
             actions, policies, entropy = get_action(pol, num_actions)
             """
@@ -200,37 +237,36 @@ def main():
             lane_actions = {0:'keep_lane', 1: 'slow_down', 2: 'change_lane_left', 3:'change_lane_right'}
 
             #print(f'action taken is {lane_actions[actions]}')
-            episode = 0
-            #steps = 0
-            collisions = 1 # -> Threshold for collisions; if veh has crashed once crashed ==True
-            crashed = False
-
             if args.render:
                 env.render()
             #Step the environment by taking the actions predicted by FuN model.
-            #observation, reward, done, info = env.step({'SingleAgent': actions})
-            observation, reward, done, info = env.step(lane_actions[actions])
+            observation, reward, done, info = env.step({'WorkerAgent': lane_actions[actions]})
             #Record the new state after taking an action
             #next_state = observation.ego_vehicle_state.linear_acceleration
-            next_state = [observation.ego_vehicle_state.linear_velocity,observation.ego_vehicle_state.position, observation.ego_vehicle_state.linear_acceleration]
+            worker_next_state = [observation['WorkerAgent'].ego_vehicle_state.linear_velocity,observation['WorkerAgent'].ego_vehicle_state.position,
+                       observation['WorkerAgent'].ego_vehicle_state.linear_acceleration, observation['WorkerAgent'].ego_vehicle_state.linear_jerk]
 
             #Increment steps and sum the reward
             steps += 1
             #print(f'steps = {steps}')
-            score += reward
+            worker_score += reward['WorkerAgent']
+            manager_score += reward['ManagerAgent']
+            total_score =+ reward['WorkerAgent'] + reward['ManagerAgent']
+
 
 
 
             #Pass the new state as a tensor to GPU
-            next_state = torch.Tensor([next_state]).to(device)
-            reward = np.asarray([reward])
+            next_state = torch.Tensor([worker_next_state]).to(device)
+            w_reward = np.asarray(reward['WorkerAgent'])
+            m_reward = np.asarray(reward['ManagerAgent'])
             mask = np.asarray([1])
             """
             Memory function that saves the transition from one state to the next, logging the states, actions, rewards 
             and network weights each time.  
             """
             memory.push(state, next_state,
-                        actions, reward, mask, goal,
+                        actions, w_reward, m_reward,mask, goal,
                         policies, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy)
             if done:
                 break
@@ -242,8 +278,8 @@ def main():
             entropy = - policies * torch.log(policies + 1e-5)
             entropy = entropy.mean().data.cpu()
             plcy = policies.tolist()[0]
-            print('global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(steps,
-                                                                                             score, entropy,
+            print('global steps {} | total_score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(steps,
+                                                                                             total_score, entropy,
                                                                                               grad_norm, pol))
             if i == 0:
                 writer.add_scalar('log/score', score[i], steps)
@@ -254,7 +290,6 @@ def main():
         """
 
         transitions = memory.sample()
-        #print('training model called')
         loss, grad_norm = train_model(net, optimizer, transitions, args)
         loss_history.append(loss.item())
         m_hx, m_cx = m_lstm
@@ -268,20 +303,20 @@ def main():
             ckpt_path = args.save_path + 'model.pt'
             torch.save(net.state_dict(), ckpt_path)
 
-    plt.plot(range(args.num_episodes), score_history)
-    plt.plot(range(9, args.num_episodes), moving_average(score_history), color='green')
-    plt.title('Average agent reward per episode')
-    plt.xlabel('Episodes')
-    plt.ylabel('Reward')
+    ax1.plot(range(args.num_episodes), score_history, color='blue')
+    ax1.plot(range(9, args.num_episodes), moving_average(score_history), color='green')
+    #plt.title('Average agent reward per episode')
+    #plt.xlabel('Episodes')
+    #plt.ylabel('Reward')
     plt.show()
-    plt.plot(range(args.num_episodes), loss_history)
-    plt.title('Losses per episode')
-    plt.xlabel('Episodes')
-    plt.ylabel('Loss')
+    ax2.plot(range(args.num_episodes), loss_history, color='black')
+    #plt.title('Losses per episode')
+    #plt.xlabel('Episodes')
+   # plt.ylabel('Loss')
     plt.show()
 
 if __name__ == "__main__":
-    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'loop')
+    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'intersections/4lane')
 
     args.scenarios = [scenario_dir]
     build_scenario(args.scenarios)

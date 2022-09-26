@@ -23,8 +23,8 @@ class Manager(nn.Module):
         x_0 = self.fc(x)
         x = F.relu(self.fc(x))
         x_1 = x
-        #x = torch.squeeze(x, 1)
-        x = torch.squeeze(x)
+        x = torch.squeeze(x, 1)
+        #x = torch.squeeze(x)
         state = x
         #print(f'manager lstm. Input size {x.size()}')
         hx, cx = self.lstm(x, (hx, cx))
@@ -67,7 +67,7 @@ class Worker(nn.Module):
         x = torch.squeeze(x)
         #x = torch.squeeze(x, 1)
         #print('worker input size ', x.size())
-        hx, cx = self.lstm(x, (hx, cx))
+        hx, cx = self.lstm(x.view(1,64), (hx, cx))
 
         value_ext = F.relu(self.fc_critic1(hx))
         value_ext = self.fc_critic1_out(value_ext)
@@ -93,6 +93,7 @@ class Worker(nn.Module):
 class Percept(nn.Module):
     def __init__(self, observation_size, num_actions):
         super(Percept, self).__init__()
+        self.observation_size = observation_size
         # self.conv1 = nn.Conv2d(
         #     in_channels=3,
         #     out_channels=16,
@@ -109,7 +110,7 @@ class Percept(nn.Module):
         # x = F.relu(self.conv1(x))
         # x = F.relu(self.conv2(x))
         # x = x.view(x.size(0), -1)
-        out = F.relu(self.fc(x))
+        out = F.relu(self.fc(x.view(1,self.observation_size)))
         return out
 
 
@@ -122,15 +123,15 @@ class FuN(nn.Module):
         self.horizon = horizon
 
     def forward(self, x, m_lstm, w_lstm, goals_horizon):
-        percept_z = self.percept(x)
-        #print(f'size of percept_z {percept_z.size()}')
-        m_inputs = (percept_z, m_lstm)
+        w_percept_z = self.percept(x)
+        #print(f'size of w_percept_z {w_percept_z.size()}')
+        m_inputs = (w_percept_z, m_lstm)
         goal, m_lstm, m_value, m_state = self.manager(m_inputs)
 
         # todo: at the start, there is no previous goals. Need to be checked
         goals_horizon = torch.cat([goals_horizon[:, 1:], goal.unsqueeze(1)], dim=1)
 
-        w_inputs = (percept_z, w_lstm, goals_horizon)
+        w_inputs = (w_percept_z, w_lstm, goals_horizon)
         policy, w_lstm, w_value_ext, w_value_int = self.worker(w_inputs)
         return policy, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state
 

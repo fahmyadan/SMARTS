@@ -212,6 +212,8 @@ class SMARTS:
         ), "cannot switch from fixed- to variable-time steps mid-simulation"
 
         try:
+            print('checking')
+            print('agent actions: ', agent_actions)
             return self._step(agent_actions, time_delta_since_last_step)
         except (KeyboardInterrupt, SystemExit):
             # ensure we clean-up if the user exits the simulation
