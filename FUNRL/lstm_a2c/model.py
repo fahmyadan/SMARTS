@@ -27,7 +27,7 @@ class Manager(nn.Module):
         x = torch.squeeze(x)
         state = x
         #print(f'manager lstm. Input size {x.size()}')
-        hx, cx = self.lstm(x, (hx, cx))
+        hx, cx = self.lstm(x.view(1,64), (hx, cx))
 
         goal = cx
         value = F.relu(self.fc_critic1(goal))
@@ -67,7 +67,7 @@ class Worker(nn.Module):
         x = torch.squeeze(x)
         #x = torch.squeeze(x, 1)
         #print('worker input size ', x.size())
-        hx, cx = self.lstm(x, (hx, cx))
+        hx, cx = self.lstm(x.view(1,64), (hx, cx))
 
         value_ext = F.relu(self.fc_critic1(hx))
         value_ext = self.fc_critic1_out(value_ext)

@@ -47,8 +47,8 @@ def train_model(net, optimizer, transition, args):
     Note change: add a second dimension (3) to intrinsic rewards  to match dimensions of line 61 
     (intrinsic_rewards[i] = intrinsic_reward.detach())
     """
-    #intrinsic_rewards = torch.zeros_like(rewards).to(device)
-    intrinsic_rewards = torch.zeros(len(rewards), 3).to(device)
+    intrinsic_rewards = torch.zeros_like(rewards).to(device)
+    #intrinsic_rewards = torch.zeros(len(rewards), 3).to(device)
 
     """
     Compute the loss for training. We are computing cosine similarity between the GOAL set by manager and manager's 
@@ -61,7 +61,7 @@ def train_model(net, optimizer, transition, args):
         for j in range(1, args.horizon + 1):
             alpha = m_states[i] - m_states[i - j]
             beta = goals[i - j]
-            cosine_sim = F.cosine_similarity(alpha, beta)
+            cosine_sim = F.cosine_similarity(alpha.view(1,64), beta)
             cos_sum = cos_sum + cosine_sim
         intrinsic_reward = cos_sum / args.horizon
         intrinsic_rewards[i] = intrinsic_reward.detach()
@@ -77,11 +77,12 @@ def train_model(net, optimizer, transition, args):
         m_advantage = m_returns[i].to(device) - m_values[i].squeeze(-1)
         alpha = m_states[i + args.horizon] - m_states[i]
         beta = goals[i]
-        cosine_sim = F.cosine_similarity(alpha.detach(), beta)
+        cosine_sim = F.cosine_similarity(alpha.view(1,64), beta)
         m_loss[i] = - m_advantage * cosine_sim
 
         log_policy = torch.log(policies[i] + 1e-5)
         w_advantage = w_returns[i].to(device) + returns_int[i].to(device) - w_values_ext[i].squeeze(-1) - w_values_int[i].squeeze(-1)
+        #Gather method problems
         log_policy = log_policy.gather(-1, actions[i].unsqueeze(-1))
         w_loss[i] = - w_advantage * log_policy.squeeze(-1)
     

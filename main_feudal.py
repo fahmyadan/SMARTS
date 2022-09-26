@@ -102,13 +102,11 @@ OBSERVATION_SPACE = gym.spaces.Dict(
 )
 
 def observation_adapter(env_obs):
-    print(f'observation adapter{lane_ttc_observation_adapter.transform(env_obs)}')
+
     return lane_ttc_observation_adapter.transform(env_obs)
 
 
 def reward_adapter(env_obs, env_reward):
-    print(f'reward in this step is {env_reward}')
-    print(f'observation made is {env_obs}')
     return env_reward
 
 def main():
@@ -180,15 +178,15 @@ def main():
     #torch.size([1,3*16])
     #changed from : m_hx = torch.zeros(1, num_actions * 16).to(device)
     # same m_cx and worker hidden and cell states
-    m_hx = torch.zeros(observation_size, num_actions * 16).to(device)
-    m_cx = torch.zeros(observation_size, num_actions * 16).to(device)
+    m_hx = torch.zeros(args.num_envs, num_actions * 16).to(device)
+    m_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
     m_lstm = (m_hx, m_cx)
 
-    w_hx = torch.zeros(observation_size ,num_actions * 16).to(device)
-    w_cx = torch.zeros(observation_size, num_actions * 16).to(device)
+    w_hx = torch.zeros(args.num_envs ,num_actions * 16).to(device)
+    w_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
     w_lstm = (w_hx, w_cx)
     #Used to be goals_horizon = torch.zeros(1, args.horizon + 1, num_actions * 16).to(device)
-    goals_horizon = torch.zeros(observation_size, args.horizon + 1, num_actions * 16).to(device)
+    goals_horizon = torch.zeros(args.num_envs, args.horizon + 1, num_actions * 16).to(device)
 
     score_history = []
     loss_history = []
@@ -226,9 +224,7 @@ def main():
         for i in range(args.num_step):
             net_output = net.forward(state.to(device), m_lstm, w_lstm, goals_horizon)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
-
-            pol = policies[0]
-            actions, policies, entropy = get_action(pol, num_actions)
+            actions, policies, entropy = get_action(policies, num_actions)
             """
             Actions available to ActionSpaceType.Lane are [keep_lane, slow_down, change_lane_left, change_lane_right]
             see smarts.core.controllers.__init__  
@@ -244,10 +240,13 @@ def main():
             #observation, reward, done, info = env.step({'SingleAgent': actions})
             observation, reward, done, info = env.step(lane_actions[actions])
             #Record the new state after taking an action
-            #next_state = observation.ego_vehicle_state.linear_acceleration
-            next_state = [observation.ego_vehicle_state.linear_velocity,
-                     observation.ego_vehicle_state.position,
-                     observation.ego_vehicle_state.linear_acceleration]
+            next_state = [torch.Tensor(observation['distance_from_center']),
+                     torch.Tensor(observation['angle_error']),
+                     torch.Tensor(observation['speed']),
+                     torch.Tensor(observation['steering']),
+                     torch.Tensor(observation['ego_ttc']),
+                     torch.Tensor(observation['ego_lane_dist'])
+                ]
 
             #Increment steps and sum the reward
             steps += 1
@@ -257,7 +256,7 @@ def main():
 
 
             #Pass the new state as a tensor to GPU
-            next_state = torch.Tensor([next_state]).to(device)
+            next_state = torch.cat(next_state).to(device)
             reward = np.asarray([reward])
             mask = np.asarray([1])
             """
@@ -279,7 +278,7 @@ def main():
             plcy = policies.tolist()[0]
             print('action is {} | global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(lane_actions[actions],steps,
                                                                                              score, entropy,
-                                                                                              grad_norm, pol))
+                                                                                              grad_norm, policies))
             if i == 0:
                 writer.add_scalar('log/score', score[i], steps)
 
