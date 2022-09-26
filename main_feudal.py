@@ -17,7 +17,7 @@ from FUNRL.lstm_a2c.memory import Memory
 
 from examples.argument_parser import default_argument_parser
 from smarts.core.agent import Agent
-from smarts.core.agent_interface import AgentInterface, AgentType
+from smarts.core.agent_interface import AgentInterface, AgentType, NeighborhoodVehicles
 from smarts.core.sensors import Observation
 from smarts.core.utils.episodes import episodes
 from smarts.env.wrappers.single_agent import SingleAgent
@@ -25,6 +25,7 @@ from smarts.sstudio import build_scenario
 from smarts.zoo.agent_spec import AgentSpec
 from smarts.core.controllers import ActionSpaceType
 from smarts.core.utils.episodes import episodes
+from smarts.env.custom_observations import lane_ttc_observation_adapter
 
 import os
 
@@ -41,9 +42,9 @@ parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
 parser.add_argument('--num_episodes', default=1000, help='')
-parser.add_argument('--num_step', default=400, help='')
+parser.add_argument('--num_step', default=50, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
-parser.add_argument('--entropy_coef', default=0.5, help='')
+parser.add_argument('--entropy_coef', default=0.1, help='')
 parser.add_argument('--lr', default=7e-4, help='')
 parser.add_argument('--eps', default=1e-5, help='')
 parser.add_argument('--horizon', default=9, help='')
@@ -83,10 +84,36 @@ def moving_average(a, n=10) :
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
+"""
+
+Adapters for transforming raw sensor observations to a more useful form. 
+
+"""
+
+OBSERVATION_SPACE = gym.spaces.Dict(
+    {
+        "distance_from_center": gym.spaces.Box(low=-1e10, high=1e10, shape=(1,)),
+        "angle_error": gym.spaces.Box(low=-np.pi, high=np.pi, shape=(1,)),
+        "speed": gym.spaces.Box(low=-1e10, high=1e10, shape=(1,)),
+        "steering": gym.spaces.Box(low=-1e10, high=1e10, shape=(1,)),
+        "ego_lane_dist": gym.spaces.Box(low=-1e10, high=1e10, shape=(3,)),
+        "ego_ttc": gym.spaces.Box(low=-1e10, high=1e10, shape=(3,)),
+    }
+)
+
+def observation_adapter(env_obs):
+    print(f'observation adapter{lane_ttc_observation_adapter.transform(env_obs)}')
+    return lane_ttc_observation_adapter.transform(env_obs)
+
+
+def reward_adapter(env_obs, env_reward):
+    print(f'reward in this step is {env_reward}')
+    print(f'observation made is {env_obs}')
+    return env_reward
 
 def main():
     writer = SummaryWriter('logs')
-    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'loop')
+    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'intersections/4lane')
     # parser = default_argument_parser("feudal-learning")
     # args = parser.parse_args()
     args.scenarios = [scenario_dir]  #Relative file path To Do: Change to absolute
@@ -96,16 +123,18 @@ def main():
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
     args.num_step = 500
-    args.headless = False
+    args.headless = True
     """
     Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
     and specifies the actions the agent can take to impact the env 
     """
     agent_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
-                                     max_episode_steps=args.num_step)
+                                     max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=10))
     agent_spec = AgentSpec(
         interface=agent_interface,
         agent_builder=ChaseViaPointsAgent,
+        reward_adapter=reward_adapter,
+        observation_adapter=observation_adapter
     )
     """
     Make the HiwayEnv environment. 
@@ -126,7 +155,7 @@ def main():
     env.seed(500)
     torch.manual_seed(500)
 
-    observation_size = 3 #agent_spec.interface.waypoints.lookahead
+    observation_size = 10 #agent_spec.interface.waypoints.lookahead
     num_actions = 4
     print('observation size:', observation_size)
     print('action size:', num_actions)
@@ -145,7 +174,7 @@ def main():
     count = 0
     grad_norm = 0
     #Initialize state -> zeros torch.Size([3])
-    state = torch.zeros([observation_size]).to(device)
+    state = torch.zeros([observation_size,observation_size]).to(device)
 
     #Initialize hidden and cell state of Manager and Worker
     #torch.size([1,3*16])
@@ -162,6 +191,7 @@ def main():
     goals_horizon = torch.zeros(observation_size, args.horizon + 1, num_actions * 16).to(device)
 
     score_history = []
+    loss_history = []
     for episode in episodes(n=args.num_episodes):
         score = 0
         memory = Memory()
@@ -174,11 +204,18 @@ def main():
         in this case we ar only using linear acceleration
         
         """
-        state_rep = [observation.ego_vehicle_state.linear_velocity,observation.ego_vehicle_state.position, observation.ego_vehicle_state.linear_acceleration]
-        state = torch.Tensor(state_rep).to(device)
+        state_rep = [torch.Tensor(observation['distance_from_center']),
+                     torch.Tensor(observation['angle_error']),
+                     torch.Tensor(observation['speed']),
+                     torch.Tensor(observation['steering']),
+                     torch.Tensor(observation['ego_ttc']),
+                     torch.Tensor(observation['ego_lane_dist']),
+                     ]
+
+        state = torch.cat(state_rep).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
-        #if count == 2:
+        #if count == 4:
          #   print(f'count = {count}, break ')
         steps = 0
         """
@@ -201,10 +238,6 @@ def main():
             #print(f'action taken is {lane_actions[actions]}')
             episode = 0
             #steps = 0
-            score = 0
-            collisions = 1 # -> Threshold for collisions; if veh has crashed once crashed ==True
-            crashed = False
-
             if args.render:
                 env.render()
             #Step the environment by taking the actions predicted by FuN model.
@@ -212,7 +245,9 @@ def main():
             observation, reward, done, info = env.step(lane_actions[actions])
             #Record the new state after taking an action
             #next_state = observation.ego_vehicle_state.linear_acceleration
-            next_state = [observation.ego_vehicle_state.linear_velocity,observation.ego_vehicle_state.position, observation.ego_vehicle_state.linear_acceleration]
+            next_state = [observation.ego_vehicle_state.linear_velocity,
+                     observation.ego_vehicle_state.position,
+                     observation.ego_vehicle_state.linear_acceleration]
 
             #Increment steps and sum the reward
             steps += 1
@@ -236,19 +271,20 @@ def main():
                 break
             #End of step loop, assign the state to be passed to FuN(manager and worker) as the most recent state and repeat loop.
             state = next_state
-            #print('new step')
+            #print('total score is ',score)
         #If done criteria == True, calculate entropy -> H(x) = -P * log(P)
         if done:
             entropy = - policies * torch.log(policies + 1e-5)
             entropy = entropy.mean().data.cpu()
             plcy = policies.tolist()[0]
-            print('global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(steps,
+            print('action is {} | global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(lane_actions[actions],steps,
                                                                                              score, entropy,
                                                                                               grad_norm, pol))
             if i == 0:
                 writer.add_scalar('log/score', score[i], steps)
 
         score_history.append(score)
+
         """
         For each episode, compute the loss as a cosine similarity between 2 vectors (m_state & goal)
         """
@@ -256,7 +292,7 @@ def main():
         transitions = memory.sample()
         #print('training model called')
         loss, grad_norm = train_model(net, optimizer, transitions, args)
-
+        loss_history.append(float(loss))
         m_hx, m_cx = m_lstm
         m_lstm = (m_hx.detach(), m_cx.detach())
         w_hx, w_cx = w_lstm
@@ -268,6 +304,7 @@ def main():
             ckpt_path = args.save_path + 'model.pt'
             torch.save(net.state_dict(), ckpt_path)
 
+    #plt.plot(range(args.num_episodes), moving_average(loss_history))
     plt.plot(range(args.num_episodes), score_history)
     plt.plot(range(9, args.num_episodes), moving_average(score_history), color='green')
     plt.title('Average agent reward per episode')
@@ -276,7 +313,7 @@ def main():
     plt.show()
 
 if __name__ == "__main__":
-    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'loop')
+    scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'intersections/4lane')
 
     args.scenarios = [scenario_dir]
     build_scenario(args.scenarios)
