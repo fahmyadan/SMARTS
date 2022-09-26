@@ -42,7 +42,7 @@ parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
 parser.add_argument('--num_episodes', default=1000, help='')
-parser.add_argument('--num_step', default=50, help='')
+parser.add_argument('--num_step', default=500, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.1, help='')
 parser.add_argument('--lr', default=7e-4, help='')
@@ -121,7 +121,7 @@ def main():
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
     args.num_step = 500
-    args.headless = True
+    args.headless = False
     """
     Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
     and specifies the actions the agent can take to impact the env 
