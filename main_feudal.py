@@ -41,7 +41,7 @@ parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
-parser.add_argument('--num_episodes', default=1000, help='')
+parser.add_argument('--num_episodes', default=500, help='')
 parser.add_argument('--num_step', default=500, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.1, help='')
@@ -102,6 +102,8 @@ OBSERVATION_SPACE = gym.spaces.Dict(
 )
 
 ttc_threshold = 1000
+ttc_weight = 0.9
+ttc_dist_weight = 0.9
 
 def observation_adapter(env_obs):
     return lane_ttc_observation_adapter.transform(env_obs)
@@ -110,6 +112,16 @@ def observation_adapter(env_obs):
 def reward_adapter(env_obs, env_reward):
     adapt_obs = observation_adapter(env_obs)
     obs_ttc = adapt_obs['ego_ttc']
+    obs_ttc_dist = adapt_obs['ego_lane_dist']
+    for ttc in obs_ttc:
+        if ttc > ttc_threshold:
+            env_reward = -1
+            return env_reward
+
+    ttc_norm = obs_ttc.mean()/max(obs_ttc)
+    ttc_dist_norm = obs_ttc_dist.mean()/max(obs_ttc_dist)
+    env_reward = (ttc_weight *ttc_norm) + (ttc_dist_weight*ttc_dist_norm) + env_obs.distance_travelled
+
     return env_reward
 
 def main():
@@ -294,7 +306,7 @@ def main():
         transitions = memory.sample()
         #print('training model called')
         loss, grad_norm = train_model(net, optimizer, transitions, args)
-        loss_history.append(float(loss))
+        loss_history.append(loss.item())
         m_hx, m_cx = m_lstm
         m_lstm = (m_hx.detach(), m_cx.detach())
         w_hx, w_cx = w_lstm
@@ -312,6 +324,11 @@ def main():
     plt.title('Average agent reward per episode')
     plt.xlabel('Episodes')
     plt.ylabel('Reward')
+    plt.show()
+    plt.plot(range(args.num_episodes), loss_history)
+    plt.title('Losses per episode')
+    plt.xlabel('Episodes')
+    plt.ylabel('Loss')
     plt.show()
 
 if __name__ == "__main__":
