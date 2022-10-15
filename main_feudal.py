@@ -57,22 +57,19 @@ args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class ChaseViaPointsAgent(Agent):
-    def act(self, obs: Observation):
-        if (
-            len(obs.via_data.near_via_points) < 1
-            or obs.ego_vehicle_state.road_id != obs.via_data.near_via_points[0].road_id
-        ):
-            return (obs.waypoint_paths[0][0].speed_limit, 0)
+class WorkerAgent(Agent):
+    def act(self, obs: Observation, actions):
+        lane_actions = {0: 'keep_lane', 1: 'slow_down', 2: 'change_lane_left', 3: 'change_lane_right'}
 
-        nearest = obs.via_data.near_via_points[0]
-        if nearest.lane_index == obs.ego_vehicle_state.lane_index:
-            return (nearest.required_speed, 0)
+        return lane_actions[actions]
 
-        return (
-            nearest.required_speed,
-            1 if nearest.lane_index > obs.ego_vehicle_state.lane_index else -1,
-        )
+
+
+
+
+N_Workers = 4
+Worker_IDS = [f'Worker_{i}' for i in range(1,N_Workers+1)]
+
 
 """
 
@@ -106,7 +103,9 @@ ttc_weight = 0.9
 ttc_dist_weight = 0.9
 
 def observation_adapter(env_obs):
-    return lane_ttc_observation_adapter.transform(env_obs)
+    ttc_obs = lane_ttc_observation_adapter.transform(env_obs)
+
+    return env_obs, ttc_obs
 
 
 def reward_adapter(env_obs, env_reward):
@@ -141,14 +140,16 @@ def main():
     Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
     and specifies the actions the agent can take to impact the env 
     """
-    agent_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
+    worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
                                      max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
-    agent_spec = AgentSpec(
-        interface=agent_interface,
-        agent_builder=ChaseViaPointsAgent,
-        reward_adapter=reward_adapter,
+    worker_spec = AgentSpec(
+        interface=worker_interface,
+        agent_builder=WorkerAgent,
+        #reward_adapter=reward_adapter,
         observation_adapter=observation_adapter
     )
+    agent_specs = { worker_id: worker_spec for worker_id in Worker_IDS}
+
     """
     Make the HiwayEnv environment. 
     Args: 
@@ -159,12 +160,10 @@ def main():
     env = gym.make(
         "smarts.env:hiway-v0",
         scenarios=args.scenarios,
-        agent_specs={"SingleAgent": agent_spec},
+        agent_specs=agent_specs,
         headless=args.headless,
         sumo_headless=True,
     )
-
-    env = SingleAgent(env=env) #Wrapper for gym.env change output of step and reset
     env.seed(500)
     torch.manual_seed(500)
 
@@ -209,23 +208,40 @@ def main():
         score = 0
         memory = Memory()
         #Build the agent @ the start of each episode
-        agent = agent_spec.build_agent()
+        agents = {
+            agent_id: agent_spec.build_agent()
+            for agent_id, agent_spec in agent_specs.items()
+        }
+
         #Reset the env @ start of each episode and log the observations. observation contains all observations in SMARTS
-        observation = env.reset()
+        observations = env.reset()
         """
         specify the state as a subset of observations to be passed through the model; 
         in this case we ar only using linear acceleration
         
         """
-        state_rep = [torch.Tensor(observation['distance_from_center']),
-                     torch.Tensor(observation['angle_error']),
-                     torch.Tensor(observation['speed']),
-                     torch.Tensor(observation['steering']),
-                     torch.Tensor(observation['ego_ttc']),
-                     torch.Tensor(observation['ego_lane_dist']),
-                     ]
+        # w_state_rep = [torch.Tensor(ttc_obs['distance_from_center']),
+        #              torch.Tensor(ttc_obs['angle_error']),
+        #              torch.Tensor(ttc_obs['speed']),
+        #              torch.Tensor(ttc_obs['steering']),
+        #              torch.Tensor(ttc_obs['ego_ttc']),
+        #              torch.Tensor(ttc_obs['ego_lane_dist']),
+        #              ]
+        worker_states ={}
+        for key, value in observations.items():
+            worker_states[key] = value[1]
 
-        state = torch.cat(state_rep).to(device)
+        worker_tensors = {}
+        for key, value in worker_states.items():
+            worker_tensors[key] = [torch.Tensor(value['distance_from_center']),
+                                   torch.Tensor(value['angle_error']),
+                                   torch.Tensor(value['speed']),
+                                   torch.Tensor(value['steering']),
+                                   torch.Tensor(value['ego_ttc']),
+                                   torch.Tensor(value['ego_lane_dist'])]
+
+
+        state = torch.cat(w_state_rep).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
         #if count == 4:
@@ -244,7 +260,7 @@ def main():
             Actions available to ActionSpaceType.Lane are [keep_lane, slow_down, change_lane_left, change_lane_right]
             see smarts.core.controllers.__init__  
             """
-            lane_actions = {0:'keep_lane', 1: 'slow_down', 2: 'change_lane_left', 3:'change_lane_right'}
+
 
             #print(f'action taken is {lane_actions[actions]}')
             episode = 0
