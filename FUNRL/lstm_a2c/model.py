@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Dict, Tuple, List, Any
 
 
 class Manager(nn.Module):
@@ -20,23 +21,25 @@ class Manager(nn.Module):
 
     def forward(self, inputs):
         x, (hx, cx) = inputs
-        x_0 = self.fc(x)
-        x = F.relu(self.fc(x))
-        x_1 = x
-        #x = torch.squeeze(x, 1)
-        x = torch.squeeze(x)
+        N_workers = len(x)
+        for key,values in x.items():
+            x[key] = self.fc(values)
+            x[key] = F.relu(self.fc(x[key]))
         state = x
-        #print(f'manager lstm. Input size {x.size()}')
-        hx, cx = self.lstm(x.view(1,64), (hx, cx))
+        lstm_vals = {}
+        goal ={}
+        goal_norm ={}
 
-        goal = cx
-        value = F.relu(self.fc_critic1(goal))
-        value = self.fc_critic2(value)
+        value_fun = {}
+        for key, values in state.items():
+            lstm_vals[key] = self.lstm(state[key], (hx,cx))
+            goal[key] = lstm_vals[key][1]
+            value_fun[key] =self.fc_critic2(F.relu(self.fc_critic1(goal[key])))
+            goal_norm[key] = torch.norm(goal[key], p=2, dim=1).unsqueeze(1)
+            goal[key] = goal[key]/goal_norm[key].detach()
 
-        goal_norm = torch.norm(goal, p=2, dim=1).unsqueeze(1)
-        goal = goal / goal_norm.detach()
-        #print(f'manager complete. New state {state.size()}')
-        return goal, (hx, cx), value, state
+
+        return goal, (hx, cx), value_fun, state
 
 
 class Worker(nn.Module):
@@ -91,7 +94,7 @@ class Worker(nn.Module):
 
 
 class Percept(nn.Module):
-    def __init__(self, observation_size, num_actions):
+    def __init__(self,observation_size, num_actions):
         super(Percept, self).__init__()
         # self.conv1 = nn.Conv2d(
         #     in_channels=3,
@@ -109,7 +112,9 @@ class Percept(nn.Module):
         # x = F.relu(self.conv1(x))
         # x = F.relu(self.conv2(x))
         # x = x.view(x.size(0), -1)
-        out = F.relu(self.fc(x))
+        out = {}
+        for key, value in x.items():
+            out[key] = F.relu(self.fc(value))
         return out
 
 
@@ -118,12 +123,14 @@ class FuN(nn.Module):
         super(FuN, self).__init__()
         self.percept = Percept(observation_size, num_actions)
         self.manager = Manager(num_actions)
-        self.worker = Worker(num_actions)
+        self.worker1 = Worker(num_actions)
+        self.worker2 = Worker(num_actions)
+        self.worker3 = Worker(num_actions)
+        self.worker4 = Worker(num_actions)
         self.horizon = horizon
 
-    def forward(self, x, m_lstm, w_lstm, goals_horizon):
-        percept_z = self.percept(x)
-        #print(f'size of percept_z {percept_z.size()}')
+    def forward(self, w_states: Dict[str, List], m_states , m_lstm, w_lstm, goals_horizon):
+        percept_z = self.percept(w_states)
         m_inputs = (percept_z, m_lstm)
         goal, m_lstm, m_value, m_state = self.manager(m_inputs)
 

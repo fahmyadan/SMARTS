@@ -135,7 +135,7 @@ def main():
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
     args.num_step = 500
-    args.headless = False
+    args.headless = True
     """
     Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
     and specifies the actions the agent can take to impact the env 
@@ -167,7 +167,7 @@ def main():
     env.seed(500)
     torch.manual_seed(500)
 
-    observation_size = 10 #agent_spec.interface.waypoints.lookahead
+    observation_size = 13 + (5*3)  #13 + xyz position of N=5 neighbor vehicles
     num_actions = 4
     print('observation size:', observation_size)
     print('action size:', num_actions)
@@ -185,7 +185,6 @@ def main():
     score = np.zeros(args.num_envs)
     count = 0
     grad_norm = 0
-    #Initialize state -> zeros torch.Size([3])
     state = torch.zeros([observation_size,observation_size]).to(device)
 
     #Initialize hidden and cell state of Manager and Worker
@@ -229,19 +228,44 @@ def main():
         #              ]
         worker_states ={}
         for key, value in observations.items():
-            worker_states[key] = value[1]
+            worker_states[key] = [value[1], value[0].ego_vehicle_state.position,
+                                  [value[0].neighborhood_vehicle_states[i].position
+                                   for i in range(len(value[0].neighborhood_vehicle_states))]]
 
         worker_tensors = {}
         for key, value in worker_states.items():
-            worker_tensors[key] = [torch.Tensor(value['distance_from_center']),
-                                   torch.Tensor(value['angle_error']),
-                                   torch.Tensor(value['speed']),
-                                   torch.Tensor(value['steering']),
-                                   torch.Tensor(value['ego_ttc']),
-                                   torch.Tensor(value['ego_lane_dist'])]
+            worker_tensors[key] = (torch.Tensor(value[0]['distance_from_center']),
+                                   torch.Tensor(value[0]['angle_error']),
+                                   torch.Tensor(value[0]['speed']),
+                                   torch.Tensor(value[0]['steering']),
+                                   torch.Tensor(value[0]['ego_ttc']),
+                                   torch.Tensor(value[0]['ego_lane_dist']),
+                                   torch.Tensor(value[1]),
+                                   torch.Tensor(value[2]))
 
+        manager_state = {}
+        for key, value in observations.items():
+            manager_state[key] = value[0].ego_vehicle_state.linear_velocity
 
-        state = torch.cat(w_state_rep).to(device)
+        m_avg_velocity = sum(manager_state.values())/N_Workers
+        w_states = {}
+        for key, values in worker_tensors.items():
+            w_states[key] = [values[i].to(device) for i in range(len(values))]
+
+        #Pad Neighbor pos with 0z if <5
+        for key in w_states.keys():
+            if w_states[key][7].size()[0] <5:
+                pad = 5 - w_states[key][7].size()[0]
+                padding = (0,0,0,pad)
+                pads = torch.nn.ZeroPad2d(padding)
+                w_states[key][7] = pads(w_states[key][7]).reshape(15,1)
+        #Concatenate worker states into single tensor
+        for key in w_states.keys():
+            w_states[key][0]= torch.cat(w_states[key][0:7]).reshape(13,1)
+            w_states[key][1]= w_states[key][7]
+            w_states[key] = torch.cat(w_states[key][0:2]).reshape(1,observation_size)
+
+        m_states = torch.Tensor(m_avg_velocity).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
         #if count == 4:
@@ -253,7 +277,7 @@ def main():
          
         """
         for i in range(args.num_step):
-            net_output = net.forward(state.to(device), m_lstm, w_lstm, goals_horizon)
+            net_output = net.forward(w_states, m_states, m_lstm, w_lstm, goals_horizon)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
             actions, policies, entropy = get_action(policies, num_actions)
             """
