@@ -58,10 +58,13 @@ args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class WorkerAgent(Agent):
-    def act(self, obs: Observation, actions):
+    def act(self, actions):
         lane_actions = {0: 'keep_lane', 1: 'slow_down', 2: 'change_lane_left', 3: 'change_lane_right'}
-
-        return lane_actions[actions]
+        w_actions ={}
+        for key, value in actions.items():
+            w_actions[key] = lane_actions[value]
+        # print(w_actions)
+        return w_actions
 
 
 
@@ -197,14 +200,14 @@ def main():
 
     w_hx = torch.zeros(args.num_envs ,num_actions * 16).to(device)
     w_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
-    w_lstm = (w_hx, w_cx)
-    #Used to be goals_horizon = torch.zeros(1, args.horizon + 1, num_actions * 16).to(device)
+    w_lstm = {key : (w_hx, w_cx) for key in Worker_IDS}
     goals_horizon = torch.zeros(args.num_envs, args.horizon + 1, num_actions * 16).to(device)
 
-    score_history = []
+    score_history = {w_id: [] for w_id in Worker_IDS}
+
     loss_history = []
     for episode in episodes(n=args.num_episodes):
-        score = 0
+
         memory = Memory()
         #Build the agent @ the start of each episode
         agents = {
@@ -226,6 +229,10 @@ def main():
         #              torch.Tensor(ttc_obs['ego_ttc']),
         #              torch.Tensor(ttc_obs['ego_lane_dist']),
         #              ]
+        #Initialise 0 score/reward for all workers
+        score = 0
+        scores = {keys: score for keys in observations.keys()}
+
         worker_states ={}
         for key, value in observations.items():
             worker_states[key] = [value[1], value[0].ego_vehicle_state.position,
@@ -265,7 +272,7 @@ def main():
             w_states[key][1]= w_states[key][7]
             w_states[key] = torch.cat(w_states[key][0:2]).reshape(1,observation_size)
 
-        m_states = torch.Tensor(m_avg_velocity).to(device)
+        man_states = torch.Tensor(m_avg_velocity).to(device)
         episode.record_scenario(env.scenario_log)
         count += 1
         #if count == 4:
@@ -277,67 +284,122 @@ def main():
          
         """
         for i in range(args.num_step):
-            net_output = net.forward(w_states, m_states, m_lstm, w_lstm, goals_horizon)
+            net_output = net.forward(w_states, man_states, m_lstm, w_lstm, goals_horizon)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
             actions, policies, entropy = get_action(policies, num_actions)
             """
             Actions available to ActionSpaceType.Lane are [keep_lane, slow_down, change_lane_left, change_lane_right]
             see smarts.core.controllers.__init__  
             """
-
-
-            #print(f'action taken is {lane_actions[actions]}')
-            episode = 0
-            #steps = 0
             if args.render:
                 env.render()
             #Step the environment by taking the actions predicted by FuN model.
             #observation, reward, done, info = env.step({'SingleAgent': actions})
-            observation, reward, done, info = env.step(lane_actions[actions])
+            # for key in agents.keys():
+            #     agents[key] = agents[key].act()
+
+            w_act = [agent.act(actions) for agent in agents.values()]
+
+            observation, reward, done, info = env.step(w_act[0])
             #Record the new state after taking an action
-            next_state = [torch.Tensor(observation['distance_from_center']),
-                     torch.Tensor(observation['angle_error']),
-                     torch.Tensor(observation['speed']),
-                     torch.Tensor(observation['steering']),
-                     torch.Tensor(observation['ego_ttc']),
-                     torch.Tensor(observation['ego_lane_dist'])
-                ]
+            new_w_states = {}
+            new_w_tensors = {}
+            for key, value in observations.items():
+                new_w_states[key] = [value[1], value[0].ego_vehicle_state.position,
+                                      [value[0].neighborhood_vehicle_states[i].position
+                                       for i in range(len(value[0].neighborhood_vehicle_states))]]
+            for key, value in new_w_states.items():
+                new_w_tensors[key] = (torch.Tensor(value[0]['distance_from_center']),
+                                       torch.Tensor(value[0]['angle_error']),
+                                       torch.Tensor(value[0]['speed']),
+                                       torch.Tensor(value[0]['steering']),
+                                       torch.Tensor(value[0]['ego_ttc']),
+                                       torch.Tensor(value[0]['ego_lane_dist']),
+                                       torch.Tensor(value[1]),
+                                       torch.Tensor(value[2]))
+
+            new_m_state = {}
+            for key, value in observations.items():
+                new_m_state[key] = value[0].ego_vehicle_state.linear_velocity
+
+            m_avg_velocity = sum(new_m_state.values()) / N_Workers
+            new_w_states = {}
+            for key, values in new_w_tensors.items():
+                new_w_states[key] = [values[i].to(device) for i in range(len(values))]
+
+            # Pad Neighbor pos with 0z if <5
+            for key in new_w_states.keys():
+                if new_w_states[key][7].size()[0] < 5:
+                    pad = 5 - new_w_states[key][7].size()[0]
+                    padding = (0, 0, 0, pad)
+                    pads = torch.nn.ZeroPad2d(padding)
+                    new_w_states[key][7] = pads(new_w_states[key][7]).reshape(15, 1)
+            # Concatenate worker states into single tensor
+            for key in new_w_states.keys():
+                new_w_states[key][0] = torch.cat(new_w_states[key][0:7]).reshape(13, 1)
+                new_w_states[key][1] = new_w_states[key][7]
+                new_w_states[key] = torch.cat(new_w_states[key][0:2]).to(device).reshape(1, observation_size)
+
+            new_m_state = torch.Tensor(m_avg_velocity).to(device)
+            # next_state = [torch.Tensor(observation['distance_from_center']),
+            #          torch.Tensor(observation['angle_error']),
+            #          torch.Tensor(observation['speed']),
+            #          torch.Tensor(observation['steering']),
+            #          torch.Tensor(observation['ego_ttc']),
+            #          torch.Tensor(observation['ego_lane_dist'])
+            #     ]
+            for value in new_w_states.keys():
+                new_w_states[key]= new_w_states[key].to(device)
+
 
             #Increment steps and sum the reward
             steps += 1
-            #print(f'steps = {steps}')
-            score += reward
 
+            for key, value in reward.items():
 
+                scores[key] = scores[key] + value
 
-            #Pass the new state as a tensor to GPU
-            next_state = torch.cat(next_state).to(device)
-            reward = np.asarray([reward])
+            episode.record_step(observations, reward, done, info)
+
+            """
+            To Do: Pass manager and worker states to GPU
+            """
+
+            reward = {key: np.asarray([value]) for key, value in reward.items()}
+
             mask = np.asarray([1])
-            """
-            Memory function that saves the transition from one state to the next, logging the states, actions, rewards 
-            and network weights each time.  
-            """
-            memory.push(state, next_state,
+
+            memory.push(w_states, man_states, new_w_states, new_m_state,
                         actions, reward, mask, goal,
                         policies, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy)
-            if done:
+            if done['__all__']:
                 break
             #End of step loop, assign the state to be passed to FuN(manager and worker) as the most recent state and repeat loop.
-            state = next_state
-            #print('total score is ',score)
+            w_states = new_w_states
+            man_states = new_m_state
+
+            """
+            End of Step loop 
+            """
+
         #If done criteria == True, calculate entropy -> H(x) = -P * log(P)
-        if done:
-            entropy = - policies * torch.log(policies + 1e-5)
-            entropy = entropy.mean().data.cpu()
-            plcy = policies.tolist()[0]
-            print('action is {} | global steps {} | score: {:.3f} | entropy: {:.4f} | grad norm: {:.3f} | policy {}'.format(lane_actions[actions],steps,
-                                                                                             score, entropy,
+        if done['__all__']:
+            for key, value in entropy.items():
+                entropy[key] = -policies[key] * torch.log(policies[key]+ 1e-5)
+                entropy[key] = entropy[key].mean().data.cpu()
+
+            # entropy = - policies * torch.log(policies + 1e-5)
+            # entropy = entropy.mean().data.cpu()
+            plcy ={}
+            for key, value in policies.items():
+                plcy[key] = value.tolist()[0]
+            print('action are {} | global steps {} | score: {} | entropy: {} | grad norm: {} | policy {}'.format(w_act[0],steps,
+                                                                                             scores, entropy,
                                                                                               grad_norm, policies))
             if i == 0:
                 writer.add_scalar('log/score', score[i], steps)
-
-        score_history.append(score)
+        for key, val in scores.items():
+            score_history[key].append(val)
 
         """
         For each episode, compute the loss as a cosine similarity between 2 vectors (m_state & goal)

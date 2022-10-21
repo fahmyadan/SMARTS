@@ -5,7 +5,7 @@ from collections import namedtuple
 # https://github.com/pytorch/tutorials/blob/master/Reinforcement%20(Q-)Learning%20with%20PyTorch.ipynb
 
 Transition = namedtuple('Transition',
-                        ('history', 'next_history', 'action', 'reward',
+                        ('w_state', 'man_state', 'new_w_state', 'new_m_state', 'actions', 'reward',
                          'mask', 'goal', 'policy', 'm_lstm', 'w_lstm',
                          'm_value', 'w_value_ext', 'w_value_int', 'm_state', 'entropy'))
 
@@ -15,10 +15,10 @@ class Memory(object):
         self.memory = []
         self.position = 0
 
-    def push(self, history, next_history, action, reward,
+    def push(self, w_state, man_state, new_w_state, new_m_state, actions, reward,
              mask, goal, policy, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy=None):
         """Saves a transition."""
-        self.memory.append(Transition(history, next_history, action, reward, mask,
+        self.memory.append(Transition(w_state, man_state, new_w_state, new_m_state, actions, reward, mask,
                            goal, policy, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy))
 
     def sample(self):

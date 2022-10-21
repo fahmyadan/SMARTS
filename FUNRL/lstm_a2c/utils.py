@@ -13,11 +13,20 @@ def pre_process(image):
 
 
 def get_action(policies, num_actions):
-    m = Categorical(policies)
-    actions = m.sample()
-    actions = actions.data.cpu().numpy()
-    actions = int(actions)
-    return actions, policies, m.entropy()
+    m={}
+    actions = {}
+    entropy = {}
+    for key in policies.keys():
+        m[key] = Categorical(policies[key])
+        actions[key] = m[key].sample()
+        actions[key] = actions[key].data.cpu().numpy()
+        actions[key] = int(actions[key])
+        entropy[key] = m[key].entropy()
+    # m = Categorical(policies)
+    # actions = m.sample()
+    # actions = actions.data.cpu().numpy()
+    # actions = int(actions)
+    return actions, policies, entropy
 
 
 def get_grad_norm(model):
