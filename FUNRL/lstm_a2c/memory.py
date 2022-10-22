@@ -8,7 +8,7 @@ Transition = namedtuple('Transition',
                         ('w_state', 'man_state', 'new_w_state', 'new_m_state', 'actions', 'reward',
                          'mask', 'goal', 'policy', 'm_lstm', 'w_lstm',
                          'm_value', 'w_value_ext', 'w_value_int', 'm_state', 'entropy'))
-
+"""Test Commit"""
 
 class Memory(object):
     def __init__(self):

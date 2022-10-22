@@ -74,21 +74,10 @@ N_Workers = 4
 Worker_IDS = [f'Worker_{i}' for i in range(1,N_Workers+1)]
 
 
-"""
-
-Moving average function that computes the cummulative sum of a given array, a, and returns the average for every 10 data
-points/ arrays  
-
-"""
 def moving_average(a, n=10) :
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
-"""
-
-Adapters for transforming raw sensor observations to a more useful form. 
-
-"""
 
 OBSERVATION_SPACE = gym.spaces.Dict(
     {
@@ -109,8 +98,9 @@ def observation_adapter(env_obs):
     ttc_obs = lane_ttc_observation_adapter.transform(env_obs)
 
     return env_obs, ttc_obs
-
-
+"""
+To Do: Implement one reward for manager and workers
+"""
 def reward_adapter(env_obs, env_reward):
     adapt_obs = observation_adapter(env_obs)
     obs_ttc = adapt_obs['ego_ttc']
@@ -125,7 +115,7 @@ def reward_adapter(env_obs, env_reward):
     env_reward = (ttc_weight *ttc_norm) + (ttc_dist_weight*ttc_dist_norm) + env_obs.distance_travelled
 
     return env_reward
-
+"""Test Commit"""
 def main():
     writer = SummaryWriter('logs')
     scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'intersections/4lane')
@@ -137,12 +127,9 @@ def main():
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
-    args.num_step = 500
+    args.num_step = 50
     args.headless = True
-    """
-    Build an agent by specifying the interface. Interface captures the observations received by an agent in the env
-    and specifies the actions the agent can take to impact the env 
-    """
+
     worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
                                      max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
     worker_spec = AgentSpec(
@@ -153,13 +140,6 @@ def main():
     )
     agent_specs = { worker_id: worker_spec for worker_id in Worker_IDS}
 
-    """
-    Make the HiwayEnv environment. 
-    Args: 
-    scenario: Sequence[str]
-    agent_specs: Dict[str, AgentSpec 
-    headless: bool 
-    """
     env = gym.make(
         "smarts.env:hiway-v0",
         scenarios=args.scenarios,
@@ -178,7 +158,7 @@ def main():
     print(device)
 
     #Instantiate the FuN model object (Creating the percept, manager and worker in the __init__)
-    net = FuN(observation_size, num_actions, args.horizon)
+    net = FuN(observation_size, num_actions, args.horizon, N_Workers)
     optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
 
     net.to(device)
@@ -217,18 +197,7 @@ def main():
 
         #Reset the env @ start of each episode and log the observations. observation contains all observations in SMARTS
         observations = env.reset()
-        """
-        specify the state as a subset of observations to be passed through the model; 
-        in this case we ar only using linear acceleration
-        
-        """
-        # w_state_rep = [torch.Tensor(ttc_obs['distance_from_center']),
-        #              torch.Tensor(ttc_obs['angle_error']),
-        #              torch.Tensor(ttc_obs['speed']),
-        #              torch.Tensor(ttc_obs['steering']),
-        #              torch.Tensor(ttc_obs['ego_ttc']),
-        #              torch.Tensor(ttc_obs['ego_lane_dist']),
-        #              ]
+
         #Initialise 0 score/reward for all workers
         score = 0
         scores = {keys: score for keys in observations.keys()}
@@ -274,22 +243,13 @@ def main():
 
         man_states = torch.Tensor(m_avg_velocity).to(device)
         episode.record_scenario(env.scenario_log)
-        count += 1
-        #if count == 4:
-         #   print(f'count = {count}, break ')
         steps = 0
-        """
-        In each episode, we step (take actions) the environment. The agent model (FuN) receives the most recent 
-        state+histories and uses the NNs to estimate the best action to take given the new state. 
-         
-        """
         for i in range(args.num_step):
             net_output = net.forward(w_states, man_states, m_lstm, w_lstm, goals_horizon)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
             actions, policies, entropy = get_action(policies, num_actions)
             """
-            Actions available to ActionSpaceType.Lane are [keep_lane, slow_down, change_lane_left, change_lane_right]
-            see smarts.core.controllers.__init__  
+            To Do: Fix the discrepancy between man_state and m_state in the model 
             """
             if args.render:
                 env.render()
@@ -341,17 +301,12 @@ def main():
                 new_w_states[key] = torch.cat(new_w_states[key][0:2]).to(device).reshape(1, observation_size)
 
             new_m_state = torch.Tensor(m_avg_velocity).to(device)
-            # next_state = [torch.Tensor(observation['distance_from_center']),
-            #          torch.Tensor(observation['angle_error']),
-            #          torch.Tensor(observation['speed']),
-            #          torch.Tensor(observation['steering']),
-            #          torch.Tensor(observation['ego_ttc']),
-            #          torch.Tensor(observation['ego_lane_dist'])
-            #     ]
+
             for value in new_w_states.keys():
                 new_w_states[key]= new_w_states[key].to(device)
-
-
+            """    
+            To Do: Review w-state & m-state to find out why model states do not change at each step 
+            """
             #Increment steps and sum the reward
             steps += 1
 
@@ -379,7 +334,7 @@ def main():
             man_states = new_m_state
 
             """
-            End of Step loop 
+            To Do: Check if entropy should be > 1 ???
             """
 
         #If done criteria == True, calculate entropy -> H(x) = -P * log(P)
@@ -401,20 +356,16 @@ def main():
         for key, val in scores.items():
             score_history[key].append(val)
 
-        """
-        For each episode, compute the loss as a cosine similarity between 2 vectors (m_state & goal)
-        """
 
         transitions = memory.sample()
         #print('training model called')
-        loss, grad_norm = train_model(net, optimizer, transitions, args)
+        loss, grad_norm = train_model(net, optimizer, transitions, args, Worker_IDS)
         loss_history.append(loss.item())
         m_hx, m_cx = m_lstm
         m_lstm = (m_hx.detach(), m_cx.detach())
         w_hx, w_cx = w_lstm
         w_lstm = (w_hx.detach(), w_cx.detach())
         goals_horizon = goals_horizon.detach()
-        # avg_loss.append(loss.cpu().data)
 
         if count % args.save_interval == 0:
             ckpt_path = args.save_path + 'model.pt'
