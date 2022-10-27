@@ -15,6 +15,8 @@ from FUNRL.lstm_a2c.utils import *
 from FUNRL.lstm_a2c.train import train_model
 from FUNRL.lstm_a2c.memory import Memory
 
+from data_utils import *
+
 from examples.argument_parser import default_argument_parser
 from smarts.core.agent import Agent
 from smarts.core.agent_interface import AgentInterface, AgentType, NeighborhoodVehicles
@@ -66,18 +68,10 @@ class WorkerAgent(Agent):
         # print(w_actions)
         return w_actions
 
-
-
-
-
 N_Workers = 4
 Worker_IDS = [f'Worker_{i}' for i in range(1,N_Workers+1)]
 
 
-def moving_average(a, n=10) :
-    ret = np.cumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
 
 OBSERVATION_SPACE = gym.spaces.Dict(
     {
@@ -171,15 +165,7 @@ def main():
     state = torch.zeros([observation_size,observation_size]).to(device)
 
     #Initialize hidden and cell state of Manager and Worker
-    #torch.size([1,3*16])
-    #changed from : m_hx = torch.zeros(1, num_actions * 16).to(device)
-    # same m_cx and worker hidden and cell states
-    m_hx = torch.zeros(args.num_envs, num_actions * 16).to(device)
-    m_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
-    m_lstm = (m_hx, m_cx)
-
-    w_hx = torch.zeros(args.num_envs ,num_actions * 16).to(device)
-    w_cx = torch.zeros(args.num_envs, num_actions * 16).to(device)
+    m_lstm, w_hx, w_cx = init_lstm_weights(args.num_envs, num_actions, k=16, device=device)
     w_lstm = {key : (w_hx, w_cx) for key in Worker_IDS}
     goals_horizon = torch.zeros(args.num_envs, args.horizon + 1, num_actions * 16).to(device)
 
@@ -202,50 +188,27 @@ def main():
         score = 0
         scores = {keys: score for keys in observations.keys()}
 
-        worker_states ={}
-        for key, value in observations.items():
-            worker_states[key] = [value[1], value[0].ego_vehicle_state.position,
-                                  [value[0].neighborhood_vehicle_states[i].position
-                                   for i in range(len(value[0].neighborhood_vehicle_states))]]
-
-        worker_tensors = {}
-        for key, value in worker_states.items():
-            worker_tensors[key] = (torch.Tensor(value[0]['distance_from_center']),
-                                   torch.Tensor(value[0]['angle_error']),
-                                   torch.Tensor(value[0]['speed']),
-                                   torch.Tensor(value[0]['steering']),
-                                   torch.Tensor(value[0]['ego_ttc']),
-                                   torch.Tensor(value[0]['ego_lane_dist']),
-                                   torch.Tensor(value[1]),
-                                   torch.Tensor(value[2]))
+        worker_tensors = worker_observations(observations, device)
 
         manager_state = {}
         for key, value in observations.items():
             manager_state[key] = value[0].ego_vehicle_state.linear_velocity
 
         m_avg_velocity = sum(manager_state.values())/N_Workers
-        w_states = {}
-        for key, values in worker_tensors.items():
-            w_states[key] = [values[i].to(device) for i in range(len(values))]
-
+        #Process the data from tuple to list for mutability
+        worker_states = process_w_states(worker_tensors, device)
         #Pad Neighbor pos with 0z if <5
-        for key in w_states.keys():
-            if w_states[key][7].size()[0] <5:
-                pad = 5 - w_states[key][7].size()[0]
-                padding = (0,0,0,pad)
-                pads = torch.nn.ZeroPad2d(padding)
-                w_states[key][7] = pads(w_states[key][7]).reshape(15,1)
-        #Concatenate worker states into single tensor
-        for key in w_states.keys():
-            w_states[key][0]= torch.cat(w_states[key][0:7]).reshape(13,1)
-            w_states[key][1]= w_states[key][7]
-            w_states[key] = torch.cat(w_states[key][0:2]).reshape(1,observation_size)
+        worker_states = zero_padding(worker_states,neighbour_idx=7,n_neighbours=5)
+
+        #Concatenate worker states into (1,observation_size)) tensor
+        worker_states = concat_states(worker_states, observation_size)
 
         man_states = torch.Tensor(m_avg_velocity).to(device)
         episode.record_scenario(env.scenario_log)
         steps = 0
         for i in range(args.num_step):
-            net_output = net.forward(w_states, man_states, m_lstm, w_lstm, goals_horizon)
+            print('new step ', steps)
+            net_output = net.forward(worker_states, man_states, m_lstm, w_lstm, goals_horizon,N_Workers, num_actions,device)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
             actions, policies, entropy = get_action(policies, num_actions)
             """
@@ -260,50 +223,22 @@ def main():
 
             w_act = [agent.act(actions) for agent in agents.values()]
 
-            observation, reward, done, info = env.step(w_act[0])
+            observations, reward, done, info = env.step(w_act[0])
             #Record the new state after taking an action
-            new_w_states = {}
-            new_w_tensors = {}
-            for key, value in observations.items():
-                new_w_states[key] = [value[1], value[0].ego_vehicle_state.position,
-                                      [value[0].neighborhood_vehicle_states[i].position
-                                       for i in range(len(value[0].neighborhood_vehicle_states))]]
-            for key, value in new_w_states.items():
-                new_w_tensors[key] = (torch.Tensor(value[0]['distance_from_center']),
-                                       torch.Tensor(value[0]['angle_error']),
-                                       torch.Tensor(value[0]['speed']),
-                                       torch.Tensor(value[0]['steering']),
-                                       torch.Tensor(value[0]['ego_ttc']),
-                                       torch.Tensor(value[0]['ego_lane_dist']),
-                                       torch.Tensor(value[1]),
-                                       torch.Tensor(value[2]))
+
+            new_w_tensor= worker_observations(observations, device)
+            new_w_tensor= process_w_states(new_w_tensor, device)
+            new_w_states= zero_padding(new_w_tensor, neighbour_idx=7, n_neighbours=5)
+            new_w_states= concat_states(new_w_states, observation_size)
 
             new_m_state = {}
             for key, value in observations.items():
                 new_m_state[key] = value[0].ego_vehicle_state.linear_velocity
 
             m_avg_velocity = sum(new_m_state.values()) / N_Workers
-            new_w_states = {}
-            for key, values in new_w_tensors.items():
-                new_w_states[key] = [values[i].to(device) for i in range(len(values))]
 
-            # Pad Neighbor pos with 0z if <5
-            for key in new_w_states.keys():
-                if new_w_states[key][7].size()[0] < 5:
-                    pad = 5 - new_w_states[key][7].size()[0]
-                    padding = (0, 0, 0, pad)
-                    pads = torch.nn.ZeroPad2d(padding)
-                    new_w_states[key][7] = pads(new_w_states[key][7]).reshape(15, 1)
-            # Concatenate worker states into single tensor
-            for key in new_w_states.keys():
-                new_w_states[key][0] = torch.cat(new_w_states[key][0:7]).reshape(13, 1)
-                new_w_states[key][1] = new_w_states[key][7]
-                new_w_states[key] = torch.cat(new_w_states[key][0:2]).to(device).reshape(1, observation_size)
+            new_man_state = torch.Tensor(m_avg_velocity).to(device)
 
-            new_m_state = torch.Tensor(m_avg_velocity).to(device)
-
-            for value in new_w_states.keys():
-                new_w_states[key]= new_w_states[key].to(device)
             """    
             To Do: Review w-state & m-state to find out why model states do not change at each step 
             """
@@ -324,14 +259,14 @@ def main():
 
             mask = np.asarray([1])
 
-            memory.push(w_states, man_states, new_w_states, new_m_state,
+            memory.push(worker_states, man_states, new_w_states, new_man_state,
                         actions, reward, mask, goal,
                         policies, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy)
             if done['__all__']:
                 break
             #End of step loop, assign the state to be passed to FuN(manager and worker) as the most recent state and repeat loop.
-            w_states = new_w_states
-            man_states = new_m_state
+            worker_states= new_w_states
+            man_states = new_man_state
 
             """
             To Do: Check if entropy should be > 1 ???

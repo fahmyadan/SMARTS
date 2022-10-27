@@ -22,7 +22,7 @@ class Manager(nn.Module):
 
         self.fc_actor = nn.Linear(num_actions*16, num_actions *16 )
 
-    def forward(self, inputs):
+    def forward(self, inputs,N_workers, num_actions, device):
         """
         To do:
         Concat all worker observations to be processed by the manager
@@ -30,13 +30,28 @@ class Manager(nn.Module):
 
         DONE
         """
+
+        self.hello = 'hello'
         x, (hx, cx) = inputs
-        N_workers = len(x)
+        n_workers = len(x)
         full_obs = []
         for values in x.values():
             full_obs.append(values)
-        full_obs = torch.stack(tuple(full_obs))
-        full_obs = self.fc(full_obs.reshape(1,self.num_actions*self.N_workers *16))
+        full_obs = torch.stack(tuple(full_obs)).to(device)
+        print(full_obs.size())
+        """
+        To Do: When agent's are removed from simulation N_workers <4. self.fc() expects input of 256
+                If N_workers <4, pad the full obs with N (1,64) zeros along last dimension 
+        """
+
+        if full_obs.size()[0] < 4:
+
+            pad = 4 - full_obs.size()[0]
+            padding = (0,0,0,0,0,pad)
+            pads = torch.nn.ZeroPad2d(padding)
+            full_obs = pads(full_obs)
+
+        full_obs = self.fc(full_obs.reshape(1,self.num_actions*self.N_workers *16).to(device))
         full_obs = F.relu(self.fc(full_obs))
         full_obs = self.fc2(full_obs)
         # for key,values in x.items():
@@ -84,8 +99,19 @@ class Worker(nn.Module):
         # x = torch.squeeze(x)
         #x = torch.squeeze(x, 1)
         #print('worker input size ', x.size())
-        for keys, values in w_lstm.items():
+        """
+        To Do: Refactor to allow w_lstm to be flexible when 'Worker_N' does not exist
+        """
+        n_workers = len(x)
+
+
+
+        for keys, values in x.items():
             w_lstm[keys]= self.lstm(x[keys], (w_lstm[keys][0], w_lstm[keys][1]) )
+
+        if n_workers < 4:
+            print('worker object lengths',len(x))
+            print('worker perceptz z keys',x.keys())
 
         value_ext = {}
         value_int = {}
@@ -149,10 +175,10 @@ class FuN(nn.Module):
         self.worker = Worker(num_actions)
         self.horizon = horizon
 
-    def forward(self, w_states: Dict[str, List], m_states , m_lstm, w_lstm, goals_horizon):
+    def forward(self, w_states: Dict[str, List], m_states , m_lstm, w_lstm, goals_horizon,N_workers, num_actions, device):
         percept_z = self.percept(w_states)
         m_inputs = (percept_z, m_lstm)
-        goal, m_lstm, m_value, m_state = self.manager(m_inputs)
+        goal, m_lstm, m_value, m_state = self.manager(m_inputs, N_workers, num_actions, device)
 
         # todo: at the start, there is no previous goals. Need to be checked
 
