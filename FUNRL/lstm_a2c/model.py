@@ -38,7 +38,7 @@ class Manager(nn.Module):
         for values in x.values():
             full_obs.append(values)
         full_obs = torch.stack(tuple(full_obs)).to(device)
-        print(full_obs.size())
+        #print(full_obs.size())
         """
         To Do: When agent's are removed from simulation N_workers <4. self.fc() expects input of 256
                 If N_workers <4, pad the full obs with N (1,64) zeros along last dimension 
@@ -109,9 +109,9 @@ class Worker(nn.Module):
         for keys, values in x.items():
             w_lstm[keys]= self.lstm(x[keys], (w_lstm[keys][0], w_lstm[keys][1]) )
 
-        if n_workers < 4:
-            print('worker object lengths',len(x))
-            print('worker perceptz z keys',x.keys())
+        # if n_workers < 4:
+        #     #print('worker object lengths',len(x))
+        #     # print('worker perceptz z keys',x.keys())
 
         value_ext = {}
         value_int = {}
