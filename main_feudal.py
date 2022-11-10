@@ -207,7 +207,7 @@ def main():
         episode.record_scenario(env.scenario_log)
         steps = 0
         for i in range(args.num_step):
-            print('new step ', steps)
+            #print('new step ', steps)
             net_output = net.forward(worker_states, man_states, m_lstm, w_lstm, goals_horizon,N_Workers, num_actions,device)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
             actions, policies, entropy = get_action(policies, num_actions)
@@ -246,8 +246,8 @@ def main():
             steps += 1
 
             for key, value in reward.items():
-
-                scores[key] = scores[key] + value
+                rw = reward.get(key)
+                scores[key] = scores[key] + rw
 
             episode.record_step(observations, reward, done, info)
 
@@ -298,8 +298,8 @@ def main():
         loss_history.append(loss.item())
         m_hx, m_cx = m_lstm
         m_lstm = (m_hx.detach(), m_cx.detach())
-        w_hx, w_cx = w_lstm
-        w_lstm = (w_hx.detach(), w_cx.detach())
+        #w_hx, w_cx = w_lstm
+        #w_lstm = (w_hx.detach(), w_cx.detach())
         goals_horizon = goals_horizon.detach()
 
         if count % args.save_interval == 0:
