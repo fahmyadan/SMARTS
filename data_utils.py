@@ -62,13 +62,13 @@ def zero_padding(w_tensor, neighbour_idx, n_neighbours):
             padding = (0, 0, 0, pad)
             pads = torch.nn.ZeroPad2d(padding)
             if w_tensor[key][neighbour_idx].dim() < 2:
-                print(f'we are in w_tensor length{len(w_tensor)}  for key {key} with padding length {len(padding)} '
-                      f'and input size {w_tensor[key][neighbour_idx].dim()}')
+                # print(f'we are in w_tensor length{len(w_tensor)}  for key {key} with padding length {len(padding)} '
+                #       f'and input size {w_tensor[key][neighbour_idx].dim()}')
                 w_tensor[key][neighbour_idx] = torch.zeros(3 * n_neighbours, 1).to(device)
-                print(f'no neighbour position so created new tensor')
+                # print(f'no neighbour position so created new tensor')
             else:
                 w_tensor[key][neighbour_idx] = pads(w_tensor[key][neighbour_idx]).reshape(3 * n_neighbours, 1)
-                print(f'padding operation completed for {key} and padding len {len(padding)}')
+                # print(f'padding operation completed for {key} and padding len {len(padding)}')
 
 
 
@@ -81,18 +81,27 @@ def zero_padding(w_tensor, neighbour_idx, n_neighbours):
             # w_tensor[key][neighbour_idx] = pads(w_tensor[key][neighbour_idx]).reshape(3 * n_neighbours, 1)
 
     return w_tensor
+def zero_pad_tensor(tensor, size):
+
+    padding  = (0,0,0,size)
+    pads = torch.nn.ZeroPad2d(padding)
+    tensor = pads(tensor)
+    return tensor
+
+
+
 
 def concat_states(worker_states, observation_size):
     for key in worker_states.keys():
         worker_states[key][0] = torch.cat(worker_states[key][0:7]).reshape(13, 1)
         worker_states[key][1] = worker_states[key][7]
         #if worker_states[key][1] != 1 or worker_states[key]
-        print(f'shapes of worker {key} states are {worker_states[key][0].shape} and {worker_states[key][1].shape}')
+        #print(f'shapes of worker {key} states are {worker_states[key][0].shape} and {worker_states[key][1].shape}')
         if worker_states[key][1].shape[1] != 1:
             if worker_states[key][1].shape[0] > 5:
-                print('our extra dimension is ',worker_states[key][1].shape[0])
+               # print('our extra dimension is ',worker_states[key][1].shape[0])
                 worker_states[key][1] = worker_states[key][1][0:5]
-                print('our new dimension is ', worker_states[key][1].shape)
+                #print('our new dimension is ', worker_states[key][1].shape)
                 worker_states[key][1] = worker_states[key][1].reshape(15, 1)
                 worker_states[key] = torch.cat(worker_states[key][0:2]).reshape(1, observation_size)
             else:
