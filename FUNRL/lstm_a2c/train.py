@@ -14,7 +14,7 @@ def get_returns(rewards, masks, gamma, values):
 
     for t in reversed(range(0, len(rewards)-1)):
         #print('check training')
-        print(f'reward size is {len(rewards)} mask size is {len(masks)} ')
+        #print(f'reward size is {len(rewards)} mask size is {len(masks)} ')
         if len(rewards) > len(masks):
             print('rewards and mask do not match')
         running_returns = rewards[t] + gamma * running_returns * masks[t]

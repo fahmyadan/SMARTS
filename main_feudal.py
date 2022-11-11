@@ -43,12 +43,12 @@ parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
-parser.add_argument('--num_episodes', default=500, help='')
-parser.add_argument('--num_step', default=500, help='')
+parser.add_argument('--num_episodes', default=20, help='')
+parser.add_argument('--num_step', default=50, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
-parser.add_argument('--entropy_coef', default=0.1, help='')
+parser.add_argument('--entropy_coef', default=0.5, help='')
 parser.add_argument('--lr', default=7e-4, help='')
-parser.add_argument('--eps', default=1e-5, help='')
+parser.add_argument('--eps', default=1e-4, help='')
 parser.add_argument('--horizon', default=9, help='')
 parser.add_argument('--clip_grad_norm', default=5, help='')
 parser.add_argument('--logdir', type=str, default='./logs',
@@ -172,8 +172,10 @@ def main():
     score_history = {w_id: [] for w_id in Worker_IDS}
 
     loss_history = []
-    for episode in episodes(n=args.num_episodes):
 
+    avg_worker_reward_history =[]
+    for episode in episodes(n=args.num_episodes):
+        avg_episode_reward = []
         memory = Memory()
         #Build the agent @ the start of each episode
         agents = {
@@ -245,9 +247,16 @@ def main():
             #Increment steps and sum the reward
             steps += 1
 
-            for key, value in reward.items():
-                rw = reward.get(key)
-                scores[key] = scores[key] + rw
+            # for key, value in reward.items():
+            #     latest_reward = value
+            #     if scores.get(key) is None:
+            #         latest_reward = 0
+            #         scores[key] = latest_reward
+            #
+            #     #scores[key] = scores.get(key) + rw
+
+            for key in reward.keys():
+                score_history[key].append(reward.get(key))
 
             episode.record_step(observations, reward, done, info)
 
@@ -288,9 +297,6 @@ def main():
                                                                                               grad_norm, policies))
             if i == 0:
                 writer.add_scalar('log/score', score[i], steps)
-        for key, val in scores.items():
-            score_history[key].append(val)
-
 
         transitions = memory.sample()
         #print('training model called')
@@ -305,10 +311,21 @@ def main():
         if count % args.save_interval == 0:
             ckpt_path = args.save_path + 'model.pt'
             torch.save(net.state_dict(), ckpt_path)
+        """    
+        Calculate avg worker reward per episode
+        """
+        for vals in score_history.values():
+            worker_total_reward = sum(vals)
+            avg_episode_reward.append(worker_total_reward)
 
-    #plt.plot(range(args.num_episodes), moving_average(loss_history))
-    plt.plot(range(args.num_episodes), score_history)
-    plt.plot(range(9, args.num_episodes), moving_average(score_history), color='green')
+        avg_episode_reward = sum(avg_episode_reward)/N_Workers
+        avg_worker_reward_history.append(avg_episode_reward)
+
+
+
+    print(f'size of avg_worker_reward is {len(avg_worker_reward_history)} and num_episode is {args.num_episodes}')
+    plt.plot(range(args.num_episodes), avg_worker_reward_history)
+    plt.plot(range(9, args.num_episodes), moving_average(avg_worker_reward_history), color='green')
     plt.title('Average agent reward per episode')
     plt.xlabel('Episodes')
     plt.ylabel('Reward')
