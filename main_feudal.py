@@ -29,6 +29,8 @@ from smarts.core.controllers import ActionSpaceType
 from smarts.core.utils.episodes import episodes
 from smarts.env.custom_observations import lane_ttc_observation_adapter
 
+import traci
+
 import os
 
 
@@ -120,9 +122,9 @@ def main():
     args.save_path = './save_model/'
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
-    args.render = False
+    args.render = True
     args.num_step = 100
-    args.headless = True
+    args.headless = False
 
     worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
                                      max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
@@ -139,7 +141,8 @@ def main():
         scenarios=args.scenarios,
         agent_specs=agent_specs,
         headless=args.headless,
-        sumo_headless=True,
+        sumo_headless=False,
+        sumo_port= 45761
     )
     env.seed(500)
     torch.manual_seed(500)
@@ -179,9 +182,9 @@ def main():
             agent_id: agent_spec.build_agent()
             for agent_id, agent_spec in agent_specs.items()
         }
-
         #Reset the env @ start of each episode and log the observations. observation contains all observations in SMARTS
         observations = env.reset()
+        #traci.connect(port=40467)
 
         #Initialise 0 score/reward for all workers
         score = 0
