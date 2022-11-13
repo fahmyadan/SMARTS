@@ -19,7 +19,9 @@ def get_action(policies, num_actions):
     for key in policies.keys():
         m[key] = Categorical(policies[key])
         actions[key] = m[key].sample()
-        actions[key] = actions[key].data.cpu().numpy()
+        #print(f'policies size is {policies.get(key).size()} and actions size is {actions.get(key).size()}')
+        #actions[key] = actions[key].data.cpu().numpy()
+        #print(f'actions length {len(actions[key])}')
         actions[key] = int(actions[key])
         entropy[key] = m[key].entropy()
     # m = Categorical(policies)

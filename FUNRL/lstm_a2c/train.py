@@ -18,9 +18,8 @@ def get_returns(rewards, masks, gamma, values):
         if len(rewards) > len(masks):
             print('rewards and mask do not match')
         running_returns = rewards[t] + gamma * running_returns * masks[t]
-        #print(f'running returns = {running_returns}')
+
         returns[t] = running_returns
-    print('end of running return statement')
     if returns.std() != 0:
         returns = (returns - returns.mean()) / returns.std()
 

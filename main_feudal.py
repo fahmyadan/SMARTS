@@ -43,8 +43,8 @@ parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=12, help='')
-parser.add_argument('--num_episodes', default=20, help='')
-parser.add_argument('--num_step', default=50, help='')
+parser.add_argument('--num_episodes', default=200, help='')
+parser.add_argument('--num_step', default=100, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.5, help='')
 parser.add_argument('--lr', default=7e-4, help='')
@@ -121,7 +121,7 @@ def main():
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = False
-    args.num_step = 50
+    args.num_step = 100
     args.headless = True
 
     worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
@@ -157,9 +157,6 @@ def main():
 
     net.to(device)
     net.train()
-
-    global_steps = 0
-    score = np.zeros(args.num_envs)
     count = 0
     grad_norm = 0
     state = torch.zeros([observation_size,observation_size]).to(device)
