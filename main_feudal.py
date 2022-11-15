@@ -1,4 +1,6 @@
 import os
+import time
+
 import gym
 import argparse
 import numpy as np
@@ -29,7 +31,7 @@ from smarts.core.controllers import ActionSpaceType
 from smarts.core.utils.episodes import episodes
 from smarts.env.custom_observations import lane_ttc_observation_adapter
 
-import traci
+from smarts.core.utils.sumo import traci
 
 import os
 
@@ -174,6 +176,7 @@ def main():
     loss_history = []
 
     avg_worker_reward_history =[]
+
     for episode in episodes(n=args.num_episodes):
         avg_episode_reward = []
         memory = Memory()
@@ -182,9 +185,15 @@ def main():
             agent_id: agent_spec.build_agent()
             for agent_id, agent_spec in agent_specs.items()
         }
+
         #Reset the env @ start of each episode and log the observations. observation contains all observations in SMARTS
         observations = env.reset()
-        #traci.connect(port=40467)
+
+        # print("check", env.traffic_sim)
+        # print("check", env.traffic_sim.traci_connection)
+        # traci.init(port=45761, numRetries=100)
+
+        # traci.setOrder(1)
 
         #Initialise 0 score/reward for all workers
         score = 0
@@ -226,8 +235,10 @@ def main():
             w_act = [agent.act(actions) for agent in agents.values()]
 
             observations, reward, done, info = env.step(w_act[0])
+            # edit get_info in hiway_env to retrieve more traci info
+            traci_info = env.get_info()
+           
             #Record the new state after taking an action
-
             new_w_tensor= worker_observations(observations, device)
             new_w_tensor= process_w_states(new_w_tensor, device)
             new_w_states= zero_padding(new_w_tensor, neighbour_idx=7, n_neighbours=5)
@@ -280,7 +291,7 @@ def main():
             """
             To Do: Check if entropy should be > 1 ???
             """
-
+            # traci.close()
         #If done criteria == True, calculate entropy -> H(x) = -P * log(P)
         if done['__all__']:
             for key, value in entropy.items():
@@ -320,7 +331,6 @@ def main():
 
         avg_episode_reward = sum(avg_episode_reward)/N_Workers
         avg_worker_reward_history.append(avg_episode_reward)
-
 
 
     print(f'size of avg_worker_reward is {len(avg_worker_reward_history)} and num_episode is {args.num_episodes}')

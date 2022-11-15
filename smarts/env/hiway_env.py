@@ -39,7 +39,6 @@ class HiWayEnv(gym.Env):
 
     metadata = {"render.modes": ["human"]}
     """Metadata for gym's use"""
-
     def __init__(
         self,
         scenarios: Sequence[str],
@@ -139,7 +138,7 @@ class HiWayEnv(gym.Env):
             visdom_client = VisdomClient()
 
         all_sumo = Scenario.supports_traffic_simulation(scenarios)
-        traffic_sim = None
+        # traffic_sim = None
         if not all_sumo:
             # We currently only support the Native SUMO Traffic Provider and Social Agents for SUMO maps
             if zoo_addrs:
@@ -153,7 +152,7 @@ class HiWayEnv(gym.Env):
         else:
             from smarts.core.sumo_traffic_simulation import SumoTrafficSimulation
 
-            traffic_sim = SumoTrafficSimulation(
+            self.traffic_sim = SumoTrafficSimulation(
                 headless=sumo_headless,
                 time_resolution=fixed_timestep_sec,
                 num_external_sumo_clients=num_external_sumo_clients,
@@ -161,11 +160,12 @@ class HiWayEnv(gym.Env):
                 auto_start=sumo_auto_start,
                 endless_traffic=endless_traffic,
             )
+
             zoo_addrs = zoo_addrs
 
         self._smarts = SMARTS(
             agent_interfaces=agent_interfaces,
-            traffic_sim=traffic_sim,
+            traffic_sim=self.traffic_sim,
             envision=envision_client,
             visdom=visdom_client,
             fixed_timestep_sec=fixed_timestep_sec,
@@ -212,6 +212,13 @@ class HiWayEnv(gym.Env):
         """
         smarts_seed(seed)
         return seed
+
+    def get_info(self):
+        info = None
+        if self.traffic_sim is not None and self.traffic_sim.get_connection() is not None:
+            traci_conn = self.traffic_sim.get_connection()
+            info = traci_conn.vehicle.getIDList()
+        return info
 
     def step(
         self, agent_actions

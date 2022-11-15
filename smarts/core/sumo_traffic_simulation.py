@@ -105,6 +105,7 @@ class SumoTrafficSimulation(Provider):
         self._sumo_proc = None
         self._num_clients = 1 + num_external_sumo_clients
         self._sumo_port = sumo_port
+
         self._auto_start = auto_start
         self._endless_traffic = endless_traffic
         self._to_be_teleported = dict()
@@ -225,11 +226,9 @@ class SumoTrafficSimulation(Provider):
             )
             self._handle_traci_disconnect(e)
             raise e
-
         self._log.debug("Finished starting sumo process")
 
     def _base_sumo_load_params(self):
-
         load_params = [
             "--num-clients=%d" % self._num_clients,
             "--net-file=%s" % self._scenario.road_map.source,
@@ -389,6 +388,9 @@ class SumoTrafficSimulation(Provider):
             raise error
         return ProviderState(), False
 
+    def get_connection(self):
+        return self._traci_conn
+
     def step(self, provider_actions, dt, elapsed_sim_time) -> ProviderState:
         """
         Args:
@@ -404,7 +406,6 @@ class SumoTrafficSimulation(Provider):
         # we tell SUMO to step through dt more seconds of the simulation
         self._cumulative_sim_seconds += dt
         self._traci_conn.simulationStep(self._cumulative_sim_seconds)
-
         return self._compute_provider_state()
 
     def sync(self, provider_state: ProviderState):
