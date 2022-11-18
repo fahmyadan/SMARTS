@@ -31,7 +31,8 @@ from smarts.core.controllers import ActionSpaceType
 from smarts.core.utils.episodes import episodes
 from smarts.env.custom_observations import lane_ttc_observation_adapter
 
-from smarts.core.utils.sumo import traci
+from smarts.core.sumo_traffic_simulation import SumoTrafficSimulation
+from sumo_interfacing import TraciMethods
 
 import os
 
@@ -125,8 +126,8 @@ def main():
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = True
-    args.num_step = 100
-    args.headless = False
+    args.num_step = 50
+    args.headless = True
 
     worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
                                      max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
@@ -173,6 +174,7 @@ def main():
 
     score_history = {w_id: [] for w_id in Worker_IDS}
 
+
     loss_history = []
 
     avg_worker_reward_history =[]
@@ -188,12 +190,18 @@ def main():
 
         #Reset the env @ start of each episode and log the observations. observation contains all observations in SMARTS
         observations = env.reset()
-
+        traci_conn = env.get_info()
         # print("check", env.traffic_sim)
         # print("check", env.traffic_sim.traci_connection)
         # traci.init(port=45761, numRetries=100)
 
         # traci.setOrder(1)
+
+        # edit get_info in hiway_env to retrieve more traci info
+
+        edges_list = TraciMethods(traci_conn=traci_conn).get_edges_list()
+
+
 
         #Initialise 0 score/reward for all workers
         score = 0
@@ -235,9 +243,9 @@ def main():
             w_act = [agent.act(actions) for agent in agents.values()]
 
             observations, reward, done, info = env.step(w_act[0])
-            # edit get_info in hiway_env to retrieve more traci info
-            traci_info = env.get_info()
-           
+
+            edge_queue = TraciMethods(traci_conn).get_edge_vehicle_number()
+            print(f'for step {i} the edge queues are {edge_queue}')
             #Record the new state after taking an action
             new_w_tensor= worker_observations(observations, device)
             new_w_tensor= process_w_states(new_w_tensor, device)

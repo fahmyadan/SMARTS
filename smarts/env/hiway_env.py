@@ -218,7 +218,7 @@ class HiWayEnv(gym.Env):
         if self.traffic_sim is not None and self.traffic_sim.get_connection() is not None:
             traci_conn = self.traffic_sim.get_connection()
             info = traci_conn.vehicle.getIDList()
-        return info
+        return traci_conn
 
     def step(
         self, agent_actions

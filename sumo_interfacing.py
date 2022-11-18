@@ -7,8 +7,58 @@ if 'SUMO_HOME' in os.environ:
 else:
     sys.exit("Please declare env var SUMO_HOME")
 
-# class SumoInterface():
-#     def __int__(self):
-#         self.sumo_binary = ""
-#         self.edge_NS_1 =
-#         self.edge_NS_1 =
+class TraciMethods():
+
+    def __init__(self, traci_conn):
+        self.vehicle = traci_conn.vehicle
+        self.edge = traci_conn.edge
+        self.lane = traci_conn.lane
+
+    def get_edges_list(self):
+        edges_list = self.edge.getIDList()
+        return edges_list
+
+    def get_vehicle_list(self):
+        veh_list = self.vehicle.getIDList()
+        return veh_list
+
+    def get_lane_list(self):
+        lane_list = self.lane.getIDList()
+        return lane_list
+    """
+    Edge Methods
+    """
+    def get_edge_travel_time(self):
+        all_edges = self.edge.getIDList()
+        travel_times = {}
+        for edge_id in all_edges:
+            travel_times[edge_id] = self.edge.getTraveltime(edge_id)
+
+        return travel_times
+
+    def get_edge_waiting_time(self):
+        all_edges = self.edge.getIDList()
+        waiting_times = {}
+        for edge_id in all_edges:
+            waiting_times[edge_id] = self.edge.getWaitingTime(edgeID=edge_id)
+        return waiting_times
+
+    def get_edge_fuel_consumption(self):
+        all_edges = self.edge.getIDList()
+        edge_fuel_consumption = {}
+        for edge_id in all_edges:
+            edge_fuel_consumption[edge_id] = self.edge.getFuelConsumption(edgeID=edge_id)
+        return edge_fuel_consumption
+
+    def get_edge_vehicle_number(self):
+        all_edges = self.edge.getIDList()
+        edge_queues ={ids: [] for ids in all_edges}
+        for edge_id in all_edges:
+            edge_queues[edge_id].append(self.edge.getLastStepVehicleNumber(edgeID=edge_id))
+
+        return edge_queues
+
+
+
+
+
