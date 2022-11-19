@@ -36,24 +36,24 @@ class TraciMethods():
 
         return travel_times
 
-    def get_edge_waiting_time(self):
-        all_edges = self.edge.getIDList()
-        waiting_times = {}
-        for edge_id in all_edges:
+    def get_edge_waiting_time(self, edges_list):
+        waiting_times = {ids: [] for ids in edges_list}
+        for edge_id in edges_list:
             waiting_times[edge_id] = self.edge.getWaitingTime(edgeID=edge_id)
         return waiting_times
 
-    def get_edge_fuel_consumption(self):
-        all_edges = self.edge.getIDList()
-        edge_fuel_consumption = {}
-        for edge_id in all_edges:
-            edge_fuel_consumption[edge_id] = self.edge.getFuelConsumption(edgeID=edge_id)
-        return edge_fuel_consumption
+    def get_cumm_timeloss(self, vehicle_ids):
+        veh_timeloss = {ids: [] for ids in vehicle_ids}
+        for veh_id in vehicle_ids:
+            veh_timeloss[veh_id] = self.vehicle.getTimeLoss(veh_id)
 
-    def get_edge_vehicle_number(self):
-        all_edges = self.edge.getIDList()
-        edge_queues ={ids: [] for ids in all_edges}
-        for edge_id in all_edges:
+        cumm_timeloss = sum(veh_timeloss.values())
+        return cumm_timeloss
+
+    def get_edge_vehicle_number(self, edges_list):
+
+        edge_queues ={ids: [] for ids in edges_list}
+        for edge_id in edges_list:
             edge_queues[edge_id].append(self.edge.getLastStepVehicleNumber(edgeID=edge_id))
 
         return edge_queues

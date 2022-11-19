@@ -101,17 +101,20 @@ def observation_adapter(env_obs):
 To Do: Implement one reward for manager and workers
 """
 def reward_adapter(env_obs, env_reward):
-    adapt_obs = observation_adapter(env_obs)
-    obs_ttc = adapt_obs['ego_ttc']
-    obs_ttc_dist = adapt_obs['ego_lane_dist']
-    for ttc in obs_ttc:
-        if ttc > ttc_threshold:
-            env_reward = -1
-            return env_reward
-
-    ttc_norm = obs_ttc.mean()/max(obs_ttc)
-    ttc_dist_norm = obs_ttc_dist.mean()/max(obs_ttc_dist)
-    env_reward = (ttc_weight *ttc_norm) + (ttc_dist_weight*ttc_dist_norm) + env_obs.distance_travelled
+    # adapt_obs = observation_adapter(env_obs)
+    # obs_ttc = adapt_obs['ego_ttc']
+    # obs_ttc_dist = adapt_obs['ego_lane_dist']
+    # for ttc in obs_ttc:
+    #     if ttc > ttc_threshold:
+    #         env_reward = -1
+    #         return env_reward
+    #
+    # ttc_norm = obs_ttc.mean()/max(obs_ttc)
+    # ttc_dist_norm = obs_ttc_dist.mean()/max(obs_ttc_dist)
+    # env_reward = (ttc_weight *ttc_norm) + (ttc_dist_weight*ttc_dist_norm) + env_obs.distance_travelled
+    env_reward = env_obs.distance_travelled
+    if len(env_obs.events.collisions )!= 0:
+        env_reward = -100
 
     return env_reward
 """Test Commit"""
@@ -127,14 +130,14 @@ def main():
     args.env_name = "smarts.env:hiway-v0"
     args.render = True
     args.num_step = 50
-    args.headless = True
+    args.headless = False
 
     worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
                                      max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
     worker_spec = AgentSpec(
         interface=worker_interface,
         agent_builder=WorkerAgent,
-        #reward_adapter=reward_adapter,
+        reward_adapter=reward_adapter,
         observation_adapter=observation_adapter
     )
     agent_specs = { worker_id: worker_spec for worker_id in Worker_IDS}
@@ -144,13 +147,14 @@ def main():
         scenarios=args.scenarios,
         agent_specs=agent_specs,
         headless=args.headless,
-        sumo_headless=False,
+        sumo_headless=True,
         sumo_port= 45761
     )
     env.seed(500)
     torch.manual_seed(500)
 
     observation_size = 13 + (5*3)  #13 + xyz position of N=5 neighbor vehicles
+    manager_obs_size = 17 #(8queue + 8 wait + 1 cumm loss)
     num_actions = 4
     print('observation size:', observation_size)
     print('action size:', num_actions)
@@ -158,7 +162,7 @@ def main():
     print(device)
 
     #Instantiate the FuN model object (Creating the percept, manager and worker in the __init__)
-    net = FuN(observation_size, num_actions, args.horizon, N_Workers)
+    net = FuN(observation_size, num_actions, args.horizon, N_Workers, manager_obs_size=manager_obs_size)
     optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
 
     net.to(device)
@@ -178,7 +182,7 @@ def main():
     loss_history = []
 
     avg_worker_reward_history =[]
-
+    #episodic_queues =
     for episode in episodes(n=args.num_episodes):
         avg_episode_reward = []
         memory = Memory()
@@ -191,16 +195,16 @@ def main():
         #Reset the env @ start of each episode and log the observations. observation contains all observations in SMARTS
         observations = env.reset()
         traci_conn = env.get_info()
-        # print("check", env.traffic_sim)
-        # print("check", env.traffic_sim.traci_connection)
-        # traci.init(port=45761, numRetries=100)
-
-        # traci.setOrder(1)
-
         # edit get_info in hiway_env to retrieve more traci info
-
-        edges_list = TraciMethods(traci_conn=traci_conn).get_edges_list()
-
+        edges_list = TraciMethods(traci_conn=traci_conn).get_edges_list()[16:24]
+        veh_list = TraciMethods(traci_conn).get_vehicle_list()
+        edge_queue = TraciMethods(traci_conn=traci_conn).get_edge_vehicle_number(edges_list)
+        all_queues = [i for i in edge_queue.values()]
+        all_queues = np.asarray(all_queues)
+        edge_wait = TraciMethods(traci_conn=traci_conn).get_edge_waiting_time(edges_list)
+        all_wait = [i for i in edge_wait.values()]
+        all_wait = np.asarray(all_wait).reshape(8,1)
+        cumm_timeloss = np.asarray(TraciMethods(traci_conn).get_cumm_timeloss(veh_list))
 
 
         #Initialise 0 score/reward for all workers
@@ -209,11 +213,11 @@ def main():
 
         worker_tensors = worker_observations(observations, device)
 
-        manager_state = {}
-        for key, value in observations.items():
-            manager_state[key] = value[0].ego_vehicle_state.linear_velocity
-
-        m_avg_velocity = sum(manager_state.values())/N_Workers
+        manager_state = np.vstack((all_queues,all_wait,cumm_timeloss))
+        # for key, value in observations.items():
+        #     manager_state[key] = value[0].ego_vehicle_state.linear_velocity
+        #
+        # m_avg_velocity = sum(manager_state.values())/N_Workers
         #Process the data from tuple to list for mutability
         worker_states = process_w_states(worker_tensors, device)
         #Pad Neighbor pos with 0z if <5
@@ -222,12 +226,12 @@ def main():
         #Concatenate worker states into (1,observation_size)) tensor
         worker_states = concat_states(worker_states, observation_size)
 
-        man_states = torch.Tensor(m_avg_velocity).to(device)
+        man_states = torch.Tensor(manager_state).to(device)
         episode.record_scenario(env.scenario_log)
         steps = 0
         for i in range(args.num_step):
-            #print('new step ', steps)
-            net_output = net.forward(worker_states, man_states, m_lstm, w_lstm, goals_horizon,N_Workers, num_actions,device)
+            net_output = net.forward(manager_state=man_states, w_states=worker_states, m_lstm=m_lstm, w_lstm=w_lstm,
+                                     goals_horizon=goals_horizon, N_workers=N_Workers, num_actions=num_actions, device=device)
             policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
             actions, policies, entropy = get_action(policies, num_actions)
             """
@@ -243,36 +247,37 @@ def main():
             w_act = [agent.act(actions) for agent in agents.values()]
 
             observations, reward, done, info = env.step(w_act[0])
+            #traci observations
+            traci_conn = env.get_info()
+            new_edge_queue = TraciMethods(traci_conn=traci_conn).get_edge_vehicle_number(edges_list)
+            new_all_queues = [i for i in new_edge_queue.values()]
+            new_all_queues = np.asarray(new_all_queues)
+            new_edge_wait = TraciMethods(traci_conn=traci_conn).get_edge_waiting_time(edges_list)
+            new_all_wait = [i for i in new_edge_wait.values()]
+            new_all_wait = np.asarray(new_all_wait).reshape(8, 1)
+            new_cumm_timeloss = np.asarray(TraciMethods(traci_conn).get_cumm_timeloss(veh_list))
 
-            edge_queue = TraciMethods(traci_conn).get_edge_vehicle_number()
-            print(f'for step {i} the edge queues are {edge_queue}')
+
+
             #Record the new state after taking an action
             new_w_tensor= worker_observations(observations, device)
             new_w_tensor= process_w_states(new_w_tensor, device)
             new_w_states= zero_padding(new_w_tensor, neighbour_idx=7, n_neighbours=5)
             new_w_states= concat_states(new_w_states, observation_size)
 
-            new_m_state = {}
-            for key, value in observations.items():
-                new_m_state[key] = value[0].ego_vehicle_state.linear_velocity
-
-            m_avg_velocity = sum(new_m_state.values()) / N_Workers
-
-            new_man_state = torch.Tensor(m_avg_velocity).to(device)
+            # new_m_state = {}
+            # for key, value in observations.items():
+            #     new_m_state[key] = value[0].ego_vehicle_state.linear_velocity
+            #
+            # m_avg_velocity = sum(new_m_state.values()) / N_Workers
+            new_manager_state = np.vstack((new_all_queues, new_all_wait, new_cumm_timeloss))
+            new_man_state = torch.Tensor(new_manager_state).to(device)
 
             """    
             To Do: Review w-state & m-state to find out why model states do not change at each step 
             """
             #Increment steps and sum the reward
             steps += 1
-
-            # for key, value in reward.items():
-            #     latest_reward = value
-            #     if scores.get(key) is None:
-            #         latest_reward = 0
-            #         scores[key] = latest_reward
-            #
-            #     #scores[key] = scores.get(key) + rw
 
             for key in reward.keys():
                 score_history[key].append(reward.get(key))

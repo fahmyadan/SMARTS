@@ -9,8 +9,8 @@ class Manager(nn.Module):
         super(Manager, self).__init__()
         self.N_workers = N_Workers
         self.num_actions = num_actions
-        self.fc = nn.Linear(N_Workers*num_actions * 16, N_Workers*num_actions * 16)
-        self.fc2 = nn.Linear(N_Workers*num_actions * 16, num_actions * 16)
+        self.fc = nn.Linear(num_actions * 16, num_actions * 16)
+        self.fc2 = nn.Linear(num_actions * 16, num_actions * 16)
         # todo: change lstm to dilated lstm
         self.lstm = nn.LSTMCell(num_actions * 16, hidden_size=num_actions * 16)
         # todo: add lstm initialization
@@ -31,32 +31,29 @@ class Manager(nn.Module):
         DONE
         """
 
-        self.hello = 'hello'
         x, (hx, cx) = inputs
-        n_workers = len(x)
-        full_obs = []
-        for values in x.values():
-            full_obs.append(values)
-        full_obs = torch.stack(tuple(full_obs)).to(device)
+        # n_workers = len(x)
+        # full_obs = []
+        # for values in x.values():
+        #     full_obs.append(values)
+        # full_obs = torch.stack(tuple(full_obs)).to(device)
         #print(full_obs.size())
         """
         To Do: When agent's are removed from simulation N_workers <4. self.fc() expects input of 256
                 If N_workers <4, pad the full obs with N (1,64) zeros along last dimension 
         """
 
-        if full_obs.size()[0] < 4:
+        # if full_obs.size()[0] < 4:
+        #
+        #     pad = 4 - full_obs.size()[0]
+        #     padding = (0,0,0,0,0,pad)
+        #     pads = torch.nn.ZeroPad2d(padding)
+        #     full_obs = pads(full_obs)
 
-            pad = 4 - full_obs.size()[0]
-            padding = (0,0,0,0,0,pad)
-            pads = torch.nn.ZeroPad2d(padding)
-            full_obs = pads(full_obs)
-
-        full_obs = self.fc(full_obs.reshape(1,self.num_actions*self.N_workers *16).to(device))
+        full_obs = self.fc(x.to(device))
         full_obs = F.relu(self.fc(full_obs))
         full_obs = self.fc2(full_obs)
-        # for key,values in x.items():
-        #     x[key] = self.fc(values)
-        #     x[key] = F.relu(self.fc(x[key]))
+
         state = full_obs
         hx, cx = self.lstm(state, (hx,cx))
         goal = self.fc_actor(cx)
@@ -141,26 +138,25 @@ class Worker(nn.Module):
 
         return policy, w_lstm, value_ext, value_int
 
+class ManagerFC(nn.Module):
+    def __init__(self, manager_obs_size, num_actions):
+        super(ManagerFC, self).__init__()
+
+        self.fc = nn.Linear(manager_obs_size, num_actions*16)
+
+    def forward(self, x):
+        output = F.relu(self.fc(x.view(1,17)))
+        return output
+
 
 class Percept(nn.Module):
     def __init__(self,observation_size, num_actions):
         super(Percept, self).__init__()
-        # self.conv1 = nn.Conv2d(
-        #     in_channels=3,
-        #     out_channels=16,
-        #     kernel_size=8,
-        #     stride=4)
-        # self.conv2 = nn.Conv2d(
-        #     in_channels=16,
-        #     out_channels=32,
-        #     kernel_size=4,
-        #     stride=2)
+
         self.fc = nn.Linear(observation_size, num_actions * 16)
 
     def forward(self, x):
-        # x = F.relu(self.conv1(x))
-        # x = F.relu(self.conv2(x))
-        # x = x.view(x.size(0), -1)
+
         out = {}
         for key, value in x.items():
             out[key] = F.relu(self.fc(value))
@@ -168,16 +164,18 @@ class Percept(nn.Module):
 
 
 class FuN(nn.Module):
-    def __init__(self, observation_size, num_actions, horizon, N_Workers):
+    def __init__(self, observation_size, num_actions, horizon, N_Workers, manager_obs_size):
         super(FuN, self).__init__()
         self.percept = Percept(observation_size, num_actions)
+        self.manager_fc = ManagerFC(manager_obs_size, num_actions)
         self.manager = Manager(num_actions, N_Workers)
         self.worker = Worker(num_actions)
         self.horizon = horizon
 
-    def forward(self, w_states: Dict[str, List], m_states , m_lstm, w_lstm, goals_horizon,N_workers, num_actions, device):
+    def forward(self,manager_state, w_states: Dict[str, List], m_lstm, w_lstm, goals_horizon,N_workers, num_actions, device):
         percept_z = self.percept(w_states)
-        m_inputs = (percept_z, m_lstm)
+        percept_m = self.manager_fc(manager_state)
+        m_inputs = (percept_m, m_lstm)
         goal, m_lstm, m_value, m_state = self.manager(m_inputs, N_workers, num_actions, device)
 
         # todo: at the start, there is no previous goals. Need to be checked
