@@ -95,7 +95,6 @@ ttc_dist_weight = 0.9
 
 def observation_adapter(env_obs):
     ttc_obs = lane_ttc_observation_adapter.transform(env_obs)
-
     return env_obs, ttc_obs
 """
 To Do: Implement one reward for manager and workers
@@ -112,11 +111,23 @@ def reward_adapter(env_obs, env_reward):
     # ttc_norm = obs_ttc.mean()/max(obs_ttc)
     # ttc_dist_norm = obs_ttc_dist.mean()/max(obs_ttc_dist)
     # env_reward = (ttc_weight *ttc_norm) + (ttc_dist_weight*ttc_dist_norm) + env_obs.distance_travelled
-    env_reward = env_obs.distance_travelled
     if len(env_obs.events.collisions )!= 0:
         env_reward = -100
 
     return env_reward
+
+def manager_reward(queues, wait_time, time_loss):
+
+    sum_queue = sum(queues)
+    sum_wait = sum(wait_time)
+    scaled_time = 10 * time_loss
+
+    negative_reward = -1 * (sum_queue + sum_wait + scaled_time)
+
+    return negative_reward
+
+
+
 """Test Commit"""
 def main():
     writer = SummaryWriter('logs')
@@ -232,7 +243,7 @@ def main():
         for i in range(args.num_step):
             net_output = net.forward(manager_state=man_states, w_states=worker_states, m_lstm=m_lstm, w_lstm=w_lstm,
                                      goals_horizon=goals_horizon, N_workers=N_Workers, num_actions=num_actions, device=device)
-            policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state = net_output
+            policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_values , m_state = net_output
             actions, policies, entropy = get_action(policies, num_actions)
             """
             To Do: Fix the discrepancy between man_state and m_state in the model 
@@ -256,8 +267,12 @@ def main():
             new_all_wait = [i for i in new_edge_wait.values()]
             new_all_wait = np.asarray(new_all_wait).reshape(8, 1)
             new_cumm_timeloss = np.asarray(TraciMethods(traci_conn).get_cumm_timeloss(veh_list))
+            """
+            Compute manager reward after some time step, dt
+            """
 
-
+            junction_manager_reward = manager_reward(queues=new_all_queues, wait_time=new_all_wait,
+                                                     time_loss=new_cumm_timeloss)
 
             #Record the new state after taking an action
             new_w_tensor= worker_observations(observations, device)
@@ -265,11 +280,6 @@ def main():
             new_w_states= zero_padding(new_w_tensor, neighbour_idx=7, n_neighbours=5)
             new_w_states= concat_states(new_w_states, observation_size)
 
-            # new_m_state = {}
-            # for key, value in observations.items():
-            #     new_m_state[key] = value[0].ego_vehicle_state.linear_velocity
-            #
-            # m_avg_velocity = sum(new_m_state.values()) / N_Workers
             new_manager_state = np.vstack((new_all_queues, new_all_wait, new_cumm_timeloss))
             new_man_state = torch.Tensor(new_manager_state).to(device)
 
@@ -293,8 +303,8 @@ def main():
             mask = np.asarray([1])
 
             memory.push(worker_states, man_states, new_w_states, new_man_state,
-                        actions, reward, mask, goal,
-                        policies, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state, entropy)
+                        actions, reward, junction_manager_reward ,mask, goal,
+                        policies, m_lstm, w_lstm, m_value, w_values, m_state, entropy)
             if done['__all__']:
                 break
             #End of step loop, assign the state to be passed to FuN(manager and worker) as the most recent state and repeat loop.

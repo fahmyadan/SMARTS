@@ -104,24 +104,13 @@ class Worker(nn.Module):
 
 
         for keys, values in x.items():
-            w_lstm[keys]= self.lstm(x[keys], (w_lstm[keys][0], w_lstm[keys][1]) )
+            w_lstm[keys] = self.lstm(x[keys], (w_lstm[keys][0], w_lstm[keys][1]) )
 
-        # if n_workers < 4:
-        #     #print('worker object lengths',len(x))
-        #     # print('worker perceptz z keys',x.keys())
-
-        value_ext = {}
-        value_int = {}
+        w_values = {}
         for keys, values in w_lstm.items():
-            value_ext[keys]= F.relu(self.fc_critic1(w_lstm[keys][0]))
-            value_int[keys]= F.relu(self.fc_critic2(w_lstm[keys][0]))
-            value_ext[keys]= self.fc_critic1_out(value_ext[keys])
-            value_int[keys]= self.fc_critic2_out(value_int[keys])
+            w_values[keys]= F.relu(self.fc_critic1(w_lstm[keys][0]))
+            w_values[keys]= self.fc_critic1_out(w_values[keys])
 
-        # value_ext = F.relu(self.fc_critic1(hx))
-        # value_ext = self.fc_critic1_out(value_ext)
-        # value_int = F.relu(self.fc_critic2(hx))
-        # value_int = self.fc_critic2_out(value_int)
         worker_embed = {}
         for keys in w_lstm.keys():
             worker_embed[keys]= w_lstm[keys][0].view(w_lstm[keys][0].size(0),
@@ -136,7 +125,7 @@ class Worker(nn.Module):
             policy[key]= policy[key].squeeze(-1)
             policy[key]= F.softmax(policy[key], dim=-1)
 
-        return policy, w_lstm, value_ext, value_int
+        return policy, w_lstm, w_values
 
 class ManagerFC(nn.Module):
     def __init__(self, manager_obs_size, num_actions):
@@ -173,6 +162,7 @@ class FuN(nn.Module):
         self.horizon = horizon
 
     def forward(self,manager_state, w_states: Dict[str, List], m_lstm, w_lstm, goals_horizon,N_workers, num_actions, device):
+        torch.autograd.set_detect_anomaly(True)
         percept_z = self.percept(w_states)
         percept_m = self.manager_fc(manager_state)
         m_inputs = (percept_m, m_lstm)
@@ -183,7 +173,7 @@ class FuN(nn.Module):
         goals_horizon = torch.cat([goals_horizon[:, 1:], goal.unsqueeze(1)], dim=1)
 
         w_inputs = (percept_z, w_lstm, goals_horizon)
-        policy, w_lstm, w_value_ext, w_value_int = self.worker(w_inputs)
-        return policy, goal, goals_horizon, m_lstm, w_lstm, m_value, w_value_ext, w_value_int, m_state
+        policy, w_lstm, w_values = self.worker(w_inputs)
+        return policy, goal, goals_horizon, m_lstm, w_lstm, m_value, w_values, m_state
 
 

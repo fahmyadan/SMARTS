@@ -2,8 +2,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from FUNRL.lstm_a2c.utils import get_grad_norm
+#from SMARTS.FUNRL.lstm_a2c.utils import get_grad_norm
 import time
 from data_utils import *
+#from SMARTS.data_utils import *
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 """Test Commit"""
@@ -37,8 +39,9 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
     policies = {w_id: [] for w_id in Worker_IDs}
     log_policies = {w_id: [] for w_id in Worker_IDs}
     new_w_state = {w_id: [] for w_id in Worker_IDs}
-    w_values_int = {w_id: [] for w_id in Worker_IDs}
-    w_values_ext = {w_id: [] for w_id in Worker_IDs}
+    w_values = {w_id: [] for w_id in Worker_IDs}
+    w_lstm = {w_id: [] for w_id in Worker_IDs}
+
     man_state = []
     m_value = []
     for stuff in transition.actions:
@@ -77,18 +80,12 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
         new_w_state[keys]= tuple(new_w_state[keys])
     for keys, values in new_w_state.items():
         new_w_state[keys] = torch.stack(values).to(device)
-    for stuff in transition.w_value_int:
+    for stuff in transition.w_values:
         for keys,values in stuff.items():
-            w_values_int[keys].append(values)
-    for keys in w_values_int.keys():
-        w_values_int[keys]= tuple(w_values_int[keys])
-        w_values_int[keys] = torch.Tensor(w_values_int[keys])
-    for stuff in transition.w_value_ext:
-        for keys,values in stuff.items():
-            w_values_ext[keys].append(values)
-    for keys in w_values_ext.keys():
-        w_values_ext[keys]= tuple(w_values_ext[keys])
-        w_values_ext[keys] = torch.Tensor(w_values_ext[keys])
+            w_values[keys].append(values)
+    for keys in w_values.keys():
+        w_values[keys]= tuple(w_values[keys])
+        w_values[keys] = torch.Tensor(w_values[keys])
     for stuff in transition.m_state:
         man_state.append(stuff)
     man_state = tuple(man_state)
@@ -100,118 +97,96 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
     masks = torch.Tensor(transition.mask).to(device)
 
     w_returns = {}
-    for keys, values in w_values_ext.items():
-        w_returns[keys] = get_returns(reward[keys], masks, args.w_gamma, w_values_ext[keys])
-    """
-    To Do: Implement a different reward and calculate new return for manager 
-    At present, manager reward is calculated as an avg of worker rewards in each step
-    """
-    m_returns = {}
-    for keys, values in w_values_ext.items():
-        m_returns[keys]= get_returns(reward[keys], masks, args.m_gamma, m_value)
-    m_vals = []
-    for values in m_returns.values():
-        m_vals.append(values)
-    m_ret = torch.zeros_like(m_value)
-    steps = m_value.size()[0]
-    for i in range(len(m_vals)):
-        if m_vals[i].size()[0]< steps:
-            pad = steps - m_vals[i].size()[0]
-            padding = (0,0,0,pad)
-            pads = torch.nn.ZeroPad2d(padding)
-            m_vals[i] = pads(m_vals[i]).reshape(steps,1)
+    for keys, values in w_values.items():
+        w_returns[keys] = get_returns(reward[keys], masks, args.w_gamma, w_values[keys])
 
-    m_ret = torch.mean(torch.stack(m_vals), dim=0)
-    m_returns = m_ret
+    for stuff in transition.w_lstm:
+        for keys,values in stuff.items():
+            w_lstm[keys].append(values[0])
+
     """
-    To Do: Determine why adjacent states (step i to i+1) are the same for m_state and w_state???
+    Compute junction manager return 
     """
-    # todo: how to get intrinsic reward before 10 steps
-    intrinsic_return= {}
+    manager_reward = torch.Tensor(transition.manager_reward).to(device)
+    manager_returns = get_returns(manager_reward, masks, args.m_gamma, m_value)
+
+    """
+    Calculate intrinsic return as cosine sim between worker hidden states and manager goal
+    """
     intrinsic_reward = []
-    for keys, values in w_values_int.items():
-
-        for i in range(args.horizon, len(reward[keys])):
-            cos_sum = 0
-            for j in range(1, args.horizon + 1):
-                alpha = man_state[i] - man_state[i-j]
-                beta = goal[i-j]
-                cosine_sim = F.cosine_similarity(alpha, beta)
-                cos_sum = cos_sum + cosine_sim
-            intrinsic_reward.append(cos_sum/args.horizon)
-    intrinsic_reward = torch.cat(intrinsic_reward)
-    int_returns ={}
-    intrinsic_masks = torch.ones_like(intrinsic_reward).to(device)
-    for key in w_values_int.keys():
-        int_returns[key] = get_returns(intrinsic_reward, intrinsic_masks, args.w_gamma, w_values_int[key])
+    for key, val in w_lstm.items():
+        cos_sum = 0
+        for i in range(0, len(w_lstm[key]) - 1 ):
+            beta = goal[i+1]
+            alpha = w_lstm[key][i]
+            cosine_sim = F.cosine_similarity(alpha, beta)
+            cos_sum = cos_sum + cosine_sim
+        intrinsic_reward.append(cos_sum)
+    intrinsic_return = abs(sum(intrinsic_reward))
 
 
-    m_loss = torch.zeros_like(m_returns).to(device)
-    w_loss={}
-    for key in w_returns.keys():
-        w_loss[key] = torch.zeros_like(w_returns[key]).to(device)
-    w_adv ={}
-    action_inst ={}
-    for i in range(0, steps - args.horizon):
-        m_adv = m_returns[i] - m_value[i]
-        alpha = man_state[i + args.horizon] - man_state[i]
-        beta = goal[i]
-        cosine_sim = F.cosine_similarity(alpha, beta)
-        m_loss[i] = -m_adv * cosine_sim
+
     """
-    To Do: Investigate why worker advantage functions and policies are not computed correctly 
+    Compute manager loss (actor and critic) 
     """
+    m_critic_loss = torch.zeros_like(manager_returns).to(device)
+
+    for i in range(len(manager_returns)):
+        m_critic_loss[i] = (manager_returns[i] - m_value[i])**2
+
+    total_manager_critic_loss = sum(m_critic_loss)
+    log_goals = torch.mean(torch.log(F.softmax(goal)), dim=2)
+    m_actor_loss = torch.zeros_like(log_goals).to(device)
+    m_adv = torch.zeros_like(manager_returns).to(device)
+
+    for i in range(len(manager_returns)):
+        m_adv[i] = manager_returns[i] - m_value[i]
+        m_actor_loss[i] = -1*m_adv[i] * log_goals[i]
+
+
+    total_manager_actor_loss = sum(m_critic_loss)
+
+    """
+    To Do: Calculate workers' critic and actor loss (actor loss calculated using int return) 
+    """
+
+
     for key,values in policies.items():
         for i in range(0, policies[key].size()[0]):
             log_policies[key].append(torch.log(policies[key][i] + 1e-5))
         log_policies[key] = tuple(log_policies[key])
     for key,values in log_policies.items():
         log_policies[key] = torch.stack(values).to(device)
-        # log_policy[key] = log_policy[key].gather(-1, actions[key][i])
-
-    for key in w_returns.keys():
-        for i in range(0, len(reward[key])-args.horizon):
-
-            w_adv[key] = w_returns[key][i] + int_returns[key][i] - w_values_ext[key][i] - w_values_int[key][i]
-            action_inst[key] = actions[key][i]
 
 
-            #log_policy[key] = log_policy[0][action_inst[key]]
-            # w_advantage = w_returns[i].to(device) + returns_int[i].to(device) - w_values_ext[i].squeeze(-1) - w_values_int[i].squeeze(-1)
-            # action_inst = actions[i].item()
-            # #log_policy = log_policy.gather(-1, actions[i].unsqueeze(-1))
-            # log_policy = log_policy[0][action_inst]
-            # w_loss[i] = - w_advantage * log_policy.squeeze(-1)
-
-            #
-            # log_policy[key] = torch.log(policies[key][i] +1e-5)
-            # w_adv[key] = w_returns[key][i] + int_returns[key][i] - w_values_ext[key][i] - w_values_int[key][i]
-            #
-            # action_inst[key] = actions[key][i]
-    manager_mean_actor_loss = m_loss.mean()
-    worker_mean_loss = {}
-    for key, val in w_loss.items():
-        worker_mean_loss[key] = val.mean()
-
-    manager_value_loss = F.mse_loss(m_value.squeeze(), m_returns.detach())
     """
     To Do: Compute worker critic loss. Worker ret and values have different dimensions. 
         Pad returns with 0s when workers have been removed from simulation 
         Done
     """
-
+    steps = len(transition.actions)
     for key,vals in w_returns.items():
-        if w_returns[key].size()[0]<  steps:
+        if w_returns[key].size()[0] <  steps:
             size = steps - w_returns[key].size()[0]
             w_returns[key] = zero_pad_tensor(w_returns[key], size)
-            #w_returns[key] = zero_padding()
-    #Compute Intrinsic/Extrinsic Loss for each worker
-    w_loss_value_ext= {}
-    w_loss_value_int= {}
 
+    w_adv ={}
+    w_actor_loss = {ids:[] for ids in Worker_IDs}
+    w_total_actor_loss = {}
     for key, val in w_returns.items():
-        w_loss_value_ext[key] = F.mse_loss(w_values_ext[key].to(device).unsqueeze(1), w_returns[key].detach().to(device))
-        w_loss_value_int[key] = F.mse_loss(w_values_int[key].to(device).unsqueeze(1), int_returns[key].detach().to(device))
+        for i in range(len(val)):
+            w_adv[key] = w_returns[key][i]+ intrinsic_return - w_values[key][i]
+
+            entropy_component = policies[key][i]*log_policies[key][i]
+            entropy_component = sum(sum(entropy_component)) * args.entropy_coef
+            w_actor_loss[key].append(log_policies[key][i][0][actions[key][i]] * w_adv[key] - entropy_component)
+        w_total_actor_loss[key] = -1* sum(w_actor_loss[key])
+
+
+    w_total_critic_loss = {ids : [] for ids in Worker_IDs}
+    for keys in w_returns.keys():
+        w_total_critic_loss[keys] = F.mse_loss(w_returns[keys].to(device), w_values[keys].to(device), reduction='sum')
+
     """
     Note: Compute loss for manager and worker seperately not together 
         Implement a weighted loss function, where highest entropy gained by workers during the episode are weighted more 
@@ -224,13 +199,16 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
     for key in avg_entropy.keys():
         worker_weights[key] = avg_entropy[key]/ max(avg_entropy.values())
 
-    total_manager_loss = manager_mean_actor_loss + manager_value_loss
-    weighted_worker_loss = {}
-    for key, values in worker_mean_loss.items():
+    total_manager_loss = total_manager_actor_loss + total_manager_critic_loss
+    weighted_worker_actor_loss = {}
+    weighted_worker_critic_loss ={}
+    for key, values in w_total_actor_loss.items():
 
-        weighted_worker_loss[key] = worker_weights[key] *(w_loss_value_int[key] + w_loss_value_ext[key] + worker_mean_loss[key] )
+        weighted_worker_actor_loss[key] = worker_weights[key] * w_total_actor_loss[key]
+        weighted_worker_critic_loss[key] = worker_weights[key] * w_total_critic_loss[key]
 
-    combined_loss = total_manager_loss + sum(weighted_worker_loss.values()) - ((sum(avg_entropy.values())/len(avg_entropy))*args.entropy_coef)
+    combined_loss = total_manager_loss + sum(weighted_worker_actor_loss.values()) + sum(weighted_worker_critic_loss.values())
+    # combined_loss = total_manager_loss + sum(weighted_worker_loss.values()) - ((sum(avg_entropy.values())/len(avg_entropy))*args.entropy_coef)
     # loss = w_loss + w_loss_value_ext + w_loss_value_int + m_loss + m_loss_value - entropy.mean()*args.entropy_coef
     # TODO: Add entropy to loss for exploration
 
