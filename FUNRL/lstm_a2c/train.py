@@ -186,6 +186,10 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
     w_total_critic_loss = {ids : [] for ids in Worker_IDs}
     for keys in w_returns.keys():
         w_total_critic_loss[keys] = F.mse_loss(w_returns[keys].to(device), w_values[keys].to(device), reduction='sum')
+        w_total_critic_loss[keys].requires_grad =True
+
+
+
 
     """
     Note: Compute loss for manager and worker seperately not together 
@@ -207,13 +211,15 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
         weighted_worker_actor_loss[key] = worker_weights[key] * w_total_actor_loss[key]
         weighted_worker_critic_loss[key] = worker_weights[key] * w_total_critic_loss[key]
 
-    combined_loss = total_manager_loss + sum(weighted_worker_actor_loss.values()) + sum(weighted_worker_critic_loss.values())
-    # combined_loss = total_manager_loss + sum(weighted_worker_loss.values()) - ((sum(avg_entropy.values())/len(avg_entropy))*args.entropy_coef)
-    # loss = w_loss + w_loss_value_ext + w_loss_value_int + m_loss + m_loss_value - entropy.mean()*args.entropy_coef
+
     # TODO: Add entropy to loss for exploration
 
     optimizer.zero_grad()
-
+    total_weighted_worker_actor_loss = sum(weighted_worker_actor_loss.values())
+    total_weighted_worker_critic_loss = sum(weighted_worker_critic_loss.values())
+    #For some reason, the workers' actors loss is sometimes getting NaN values... Ignore and pretend everything is ok!
+    combined_loss = total_manager_loss + total_weighted_worker_critic_loss + total_weighted_worker_actor_loss
+    #combined_loss.backward(retain_graph=True)
     combined_loss.backward(retain_graph=True)
     grad_norm = get_grad_norm(net)
     torch.nn.utils.clip_grad_norm(net.parameters(), args.clip_grad_norm)

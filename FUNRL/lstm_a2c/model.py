@@ -162,7 +162,8 @@ class FuN(nn.Module):
         self.horizon = horizon
 
     def forward(self,manager_state, w_states: Dict[str, List], m_lstm, w_lstm, goals_horizon,N_workers, num_actions, device):
-        torch.autograd.set_detect_anomaly(True)
+        #torch.autograd.set_detect_anomaly(True)
+        #torch.autograd.detect_anomaly()
         percept_z = self.percept(w_states)
         percept_m = self.manager_fc(manager_state)
         m_inputs = (percept_m, m_lstm)
