@@ -1,3 +1,4 @@
+import math
 import os
 import time
 
@@ -33,7 +34,7 @@ from smarts.env.custom_observations import lane_ttc_observation_adapter
 
 from smarts.core.sumo_traffic_simulation import SumoTrafficSimulation
 from sumo_interfacing import TraciMethods
-
+from risk_metrics.risk_indices import *
 import os
 
 
@@ -126,7 +127,95 @@ def manager_reward(queues, wait_time, time_loss):
 
     return negative_reward
 
+def compute_risk_indices(traci_conn, veh_list):
+    veh_positions = TraciMethods(traci_conn).get_vehicle_positions(veh_list)
+    veh_speeds = TraciMethods(traci_conn).get_vehicle_speeds(veh_list)
+    veh_angles = TraciMethods(traci_conn).get_vehicle_angles(veh_list)
+    scale = 1.5
+    veh_width = 1.8
+    veh_length = 5
 
+    detection_threshold = 100 # radius of detection circle, only consider vehicle within the circle
+    for veh1 in veh_list:
+        veh1_pos = np.array(veh_positions[veh1])
+        veh1_vel = np.array(veh_speeds[veh1])
+        veh1_ang = veh_angles[veh1]
+        rotation_matrix = np.matrix([[math.cos(veh1_ang), -math.sin(veh1_ang)],
+                                     [math.sin(veh1_ang), math.cos(veh1_ang)]])
+
+        front = rear = left = right = None
+        veh1_dist_front = veh1_dist_rear = veh1_dist_left = veh1_dist_right = detection_threshold
+        r_lon_front = r_lon_rear = r_lat_left = r_lat_right = 0
+        ttc_front = ttc_rear = ttc_left = ttc_right = float('inf')
+        drac_index = 0
+        for veh2 in veh_list:
+            veh2_pos = np.array(veh_positions[veh2])
+            vec = veh2_pos - veh1_pos
+            if veh1 == veh2 or np.linalg.norm(vec) > detection_threshold:
+                continue
+            # transfer to the frame of veh1
+            dist_vec = rotation_matrix * vec.reshape(2, 1)
+            # veh2 in front of veh 1
+            if dist_vec[1] >= 0 and abs(dist_vec[0]) <= scale * veh_width:
+                if front is None or veh1_dist_front > dist_vec[1]:
+                    front = veh2
+                    veh1_dist_front = dist_vec[1]
+            elif dist_vec[1] < 0 and abs(dist_vec[0]) <= scale * veh_width:
+                if rear is None or veh1_dist_rear > dist_vec[1]:
+                    rear = veh2
+                    veh1_dist_rear = dist_vec[1]
+            # veh2 at left of veh 1
+            if dist_vec[0] <= 0 and abs(dist_vec[1]) <= scale * veh_length:
+                if left is None or veh1_dist_left > dist_vec[0]:
+                    left = veh2
+                    veh1_dist_left = dist_vec[0]
+            elif dist_vec[0] > 0 and abs(dist_vec[1]) <= scale * veh_length:
+                if right is None or veh1_dist_right > dist_vec[0]:
+                    right = veh2
+                    veh1_dist_right = dist_vec[0]
+
+        if front is not None:
+            front_pos = np.array(veh_positions[front])
+            vec = front_pos - veh1_pos
+            front_vel = np.array(veh_speeds[front])
+            dist_vec = rotation_matrix * vec.reshape(2, 1)
+            vel_vec = rotation_matrix * front_vel.reshape(2, 1)
+            safeLonDis, safeLonDisBrake = safe_lon_distances(vel_vec[0], veh1_vel[0])
+            r_lon_front = risk_index(safeLonDis, safeLonDisBrake, abs(dist_vec[1]))
+            drac_index = drac(dist_vec[1], veh1_vel[0], veh1_vel[1], vel_vec[0], vel_vec[1])
+            ttc_front = ttc_compute(dist_vec[1], veh1_vel[0] - vel_vec[0])
+        if rear is not None:
+            rear_pos = np.array(veh_positions[rear])
+            vec = rear_pos - veh1_pos
+            rear_vel = np.array(veh_speeds[rear])
+            dist_vec = rotation_matrix * vec.reshape(2, 1)
+            vel_vec = rotation_matrix * rear_vel.reshape(2, 1)
+            safeLonDis, safeLonDisBrake = safe_lon_distances(veh1_vel[0], vel_vec[0])
+            r_lon_rear = risk_index(safeLonDis, safeLonDisBrake, abs(dist_vec[1]))
+            ttc_rear = ttc_compute(dist_vec[1], veh1_vel[0] - vel_vec[0])
+        if left is not None:
+            left_pos = np.array(veh_positions[left])
+            vec = left_pos - veh1_pos
+            left_vel = np.array(veh_speeds[left])
+            dist_vec = rotation_matrix * vec.reshape(2, 1)
+            vel_vec = rotation_matrix * left_vel.reshape(2, 1)
+            safeLatDis, safeLatDisBrake = safe_lat_distances(vel_vec[1], veh1_vel[1])
+            r_lat_left = risk_index(safeLatDis, safeLatDisBrake, abs(dist_vec[0]))
+            ttc_left = ttc_compute(dist_vec[0], veh1_vel[1] - vel_vec[1])
+        if right is not None:
+            right_pos = np.array(veh_positions[right])
+            vec = right_pos - veh1_pos
+            right_vel = np.array(veh_speeds[right])
+            dist_vec = rotation_matrix * vec.reshape(2, 1)
+            vel_vec = rotation_matrix * right_vel.reshape(2, 1)
+            safeLatDis, safeLatDisBrake = safe_lat_distances(veh1_vel[0], vel_vec[0])
+            r_lat_right = risk_index(safeLatDis, safeLatDisBrake, abs(dist_vec[0]))
+            ttc_right = ttc_compute(dist_vec[0], veh1_vel[1] - vel_vec[1])
+        risk_index_lon = max(r_lon_front, r_lon_rear)
+        risk_index_lat = max(r_lat_left, r_lat_right)
+        uni_risk_index = risk_index_unified(risk_index_lon, risk_index_lat)
+        ttc = min(ttc_front, ttc_rear, ttc_left, ttc_right)
+        print(veh1, uni_risk_index, ttc, drac_index)
 
 """Test Commit"""
 def main():
@@ -141,7 +230,8 @@ def main():
     args.env_name = "smarts.env:hiway-v0"
     args.render = True
     args.num_step = 50
-    args.headless = False
+    args.headless = True
+    # args.headless = False
 
     worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
                                      max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
@@ -209,9 +299,12 @@ def main():
         # edit get_info in hiway_env to retrieve more traci info
         edges_list = TraciMethods(traci_conn=traci_conn).get_edges_list()[16:24]
         veh_list = TraciMethods(traci_conn).get_vehicle_list()
+        print("check1", len(veh_list))
+
         edge_queue = TraciMethods(traci_conn=traci_conn).get_edge_vehicle_number(edges_list)
         all_queues = [i for i in edge_queue.values()]
         all_queues = np.asarray(all_queues)
+
         edge_wait = TraciMethods(traci_conn=traci_conn).get_edge_waiting_time(edges_list)
         all_wait = [i for i in edge_wait.values()]
         all_wait = np.asarray(all_wait).reshape(8,1)
@@ -260,6 +353,10 @@ def main():
             observations, reward, done, info = env.step(w_act[0])
             #traci observations
             traci_conn = env.get_info()
+            veh_list = TraciMethods(traci_conn).get_vehicle_list()
+            print("check2", len(veh_list))
+            compute_risk_indices(traci_conn, veh_list)
+
             new_edge_queue = TraciMethods(traci_conn=traci_conn).get_edge_vehicle_number(edges_list)
             new_all_queues = [i for i in new_edge_queue.values()]
             new_all_queues = np.asarray(new_all_queues)
