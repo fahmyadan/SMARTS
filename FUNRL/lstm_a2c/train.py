@@ -165,10 +165,17 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
         Done
     """
     steps = len(transition.actions)
-    for key,vals in w_returns.items():
-        if w_returns[key].size()[0] <  steps:
-            size = steps - w_returns[key].size()[0]
-            w_returns[key] = zero_pad_tensor(w_returns[key], size)
+    # for key,vals in w_returns.items():
+    #     if w_returns[key].size()[0] <  steps:
+    #         size = steps - w_returns[key].size()[0]
+    #         w_returns[key] = zero_pad_tensor(w_returns[key], size)
+    """
+    Pad w_values and w_returns to be equal in size. Sometimes an agent dies so some will have different sizes. 
+    """
+    # for key in w_values.keys():
+    #     if w_values[key].size()[0] < steps: 
+    #         size = steps - w_values[key].size()[0]
+    #         w_values[key] = zero_pad_tensor(w_values[key], size)
 
     w_adv ={}
     w_actor_loss = {ids:[] for ids in Worker_IDs}
@@ -213,15 +220,24 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
 
 
     # TODO: Add entropy to loss for exploration
-
+    
     optimizer.zero_grad()
     total_weighted_worker_actor_loss = sum(weighted_worker_actor_loss.values())
     total_weighted_worker_critic_loss = sum(weighted_worker_critic_loss.values())
     #For some reason, the workers' actors loss is sometimes getting NaN values... Ignore and pretend everything is ok!
-    combined_loss = total_manager_loss + total_weighted_worker_critic_loss + total_weighted_worker_actor_loss
+    combined_loss = total_manager_loss + total_weighted_worker_critic_loss #+ total_weighted_worker_actor_loss
     #combined_loss.backward(retain_graph=True)
-    combined_loss.backward(retain_graph=True)
+    # print(f'manager actor loss version {total_manager_actor_loss._version} manager critic loss version {total_manager_critic_loss._version}')
+    # print(f'worker critic version {total_weighted_worker_critic_loss._version} worker actor version {total_weighted_worker_actor_loss._version}')
+
+    total_manager_actor_loss.backward(retain_graph=True)
+    total_manager_critic_loss.backward(retain_graph=True)
+    total_weighted_worker_critic_loss.backward(retain_graph=True)
+
+    total_weighted_worker_actor_loss.backward(retain_graph=True)
+
     grad_norm = get_grad_norm(net)
     torch.nn.utils.clip_grad_norm(net.parameters(), args.clip_grad_norm)
     optimizer.step()
+    # return total_weighted_worker_critic_loss, total_manager_critic_loss, total_manager_actor_loss, grad_norm
     return combined_loss, grad_norm

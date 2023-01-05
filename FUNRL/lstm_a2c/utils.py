@@ -1,7 +1,7 @@
 import torch
 import numpy as np
-from skimage.color import rgb2gray
-from skimage.transform import resize
+# from skimage.color import rgb2gray
+# from skimage.transform import resize
 from torch.distributions import Categorical
 
 

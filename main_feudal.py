@@ -34,7 +34,7 @@ from smarts.env.custom_observations import lane_ttc_observation_adapter
 
 from smarts.core.sumo_traffic_simulation import SumoTrafficSimulation
 from sumo_interfacing import TraciMethods
-from risk_metrics.risk_indices import *
+from risk_indices import *
 import os
 
 
@@ -215,7 +215,7 @@ def compute_risk_indices(traci_conn, veh_list):
         risk_index_lat = max(r_lat_left, r_lat_right)
         uni_risk_index = risk_index_unified(risk_index_lon, risk_index_lat)
         ttc = min(ttc_front, ttc_rear, ttc_left, ttc_right)
-        print(veh1, uni_risk_index, ttc, drac_index)
+        # print(veh1, uni_risk_index, ttc, drac_index)
 
 """Test Commit"""
 def main():
@@ -268,7 +268,7 @@ def main():
 
     net.to(device)
     net.train()
-    count = 0
+    count = 1
     grad_norm = 0
     state = torch.zeros([observation_size,observation_size]).to(device)
 
@@ -285,6 +285,7 @@ def main():
     avg_worker_reward_history =[]
     #episodic_queues =
     for episode in episodes(n=args.num_episodes):
+        print(f'episode count {count}')
         avg_episode_reward = []
         memory = Memory()
         #Build the agent @ the start of each episode
@@ -333,10 +334,12 @@ def main():
         man_states = torch.Tensor(manager_state).to(device)
         episode.record_scenario(env.scenario_log)
         steps = 0
+        
         for i in range(args.num_step):
+            print(f'forward pass {steps}')
             net_output = net.forward(manager_state=man_states, w_states=worker_states, m_lstm=m_lstm, w_lstm=w_lstm,
                                      goals_horizon=goals_horizon, N_workers=N_Workers, num_actions=num_actions, device=device)
-            policies, goal, goals_horizon, m_lstm, w_lstm, m_value, w_values , m_state = net_output
+            policies, goal, goals_horizon, m_lstm, new_w_lstm, m_value, w_values , m_state = net_output
             actions, policies, entropy = get_action(policies, num_actions)
             """
             To Do: Fix the discrepancy between man_state and m_state in the model 
@@ -401,18 +404,22 @@ def main():
 
             memory.push(worker_states, man_states, new_w_states, new_man_state,
                         actions, reward, junction_manager_reward ,mask, goal,
-                        policies, m_lstm, w_lstm, m_value, w_values, m_state, entropy)
+                        policies, m_lstm, new_w_lstm, m_value, w_values, m_state, entropy)
             if done['__all__']:
                 break
             #End of step loop, assign the state to be passed to FuN(manager and worker) as the most recent state and repeat loop.
             worker_states= new_w_states
             man_states = new_man_state
+            w_lstm = new_w_lstm
+        
+     
 
             """
             To Do: Check if entropy should be > 1 ???
             """
             # traci.close()
         #If done criteria == True, calculate entropy -> H(x) = -P * log(P)
+        
         if done['__all__']:
             for key, value in entropy.items():
                 entropy[key] = -policies[key] * torch.log(policies[key]+ 1e-5)
@@ -432,6 +439,7 @@ def main():
         transitions = memory.sample()
         #print('training model called')
         loss, grad_norm = train_model(net, optimizer, transitions, args, Worker_IDS)
+        print(f'training check {count}')
         loss_history.append(loss.item())
         m_hx, m_cx = m_lstm
         m_lstm = (m_hx.detach(), m_cx.detach())
@@ -451,6 +459,10 @@ def main():
 
         avg_episode_reward = sum(avg_episode_reward)/N_Workers
         avg_worker_reward_history.append(avg_episode_reward)
+        count+=1 
+        if count == 2: 
+            print('next episode')
+        print('episode reset')
 
 
     print(f'size of avg_worker_reward is {len(avg_worker_reward_history)} and num_episode is {args.num_episodes}')

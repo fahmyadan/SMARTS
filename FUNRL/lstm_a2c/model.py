@@ -71,9 +71,9 @@ class Manager(nn.Module):
 
 class Worker(nn.Module):
     def __init__(self, num_actions):
-        self.num_actions = num_actions
+        
         super(Worker, self).__init__()
-
+        self.num_actions = num_actions
         self.lstm = nn.LSTMCell(num_actions * 16, hidden_size=num_actions * 16)
         self.lstm.bias_ih.data.fill_(0)
         self.lstm.bias_hh.data.fill_(0)
@@ -100,20 +100,36 @@ class Worker(nn.Module):
         To Do: Refactor to allow w_lstm to be flexible when 'Worker_N' does not exist
         """
         n_workers = len(x)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        new_w_lstm ={}
+        
+        for keys in  w_lstm.keys(): 
+            
+            if x.get(keys) == None: 
+                print(f'the agent {keys} does not exist in percept z')
+                """
+                If the agent does not exist, pass a tensor of zeros as the observation
+                """
+                print(f'old hidden state version {w_lstm[keys][0]._version} old cell state version {w_lstm[keys][1]._version}')
+                
+                new_w_lstm[keys]= self.lstm(torch.zeros(size=(1,64)).to(device), (w_lstm[keys][0], w_lstm[keys][1]))
+                print(f'new hidden state version {new_w_lstm[keys][0]._version} new cell state version {new_w_lstm[keys][1]._version}')
+           
+            else:
+                new_w_lstm[keys] = self.lstm(x[keys], (w_lstm[keys][0], w_lstm[keys][1]) )
 
-
-        for keys, values in x.items():
-            w_lstm[keys] = self.lstm(x[keys], (w_lstm[keys][0], w_lstm[keys][1]) )
+        # for keys, values in x.items():
+        #     w_lstm[keys] = self.lstm(x[keys], (w_lstm[keys][0].detach(), w_lstm[keys][1].detach()) )
 
         w_values = {}
-        for keys, values in w_lstm.items():
-            w_values[keys]= F.relu(self.fc_critic1(w_lstm[keys][0]))
+        for keys, values in new_w_lstm.items():
+            w_values[keys]= F.relu(self.fc_critic1(new_w_lstm[keys][0]))
             w_values[keys]= self.fc_critic1_out(w_values[keys])
 
         worker_embed = {}
-        for keys in w_lstm.keys():
-            worker_embed[keys]= w_lstm[keys][0].view(w_lstm[keys][0].size(0),
+        for keys in new_w_lstm.keys():
+            worker_embed[keys]= new_w_lstm[keys][0].view(new_w_lstm[keys][0].size(0),
                                                      self.num_actions,
                                               16)
         goal_embed = goals.sum(dim=1)
@@ -125,7 +141,7 @@ class Worker(nn.Module):
             policy[key]= policy[key].squeeze(-1)
             policy[key]= F.softmax(policy[key], dim=-1)
 
-        return policy, w_lstm, w_values
+        return policy, new_w_lstm, w_values
 
 class ManagerFC(nn.Module):
     def __init__(self, manager_obs_size, num_actions):
@@ -162,8 +178,8 @@ class FuN(nn.Module):
         self.horizon = horizon
 
     def forward(self,manager_state, w_states: Dict[str, List], m_lstm, w_lstm, goals_horizon,N_workers, num_actions, device):
-        #torch.autograd.set_detect_anomaly(True)
-        #torch.autograd.detect_anomaly()
+        torch.autograd.set_detect_anomaly(True)
+        torch.autograd.detect_anomaly()
         percept_z = self.percept(w_states)
         percept_m = self.manager_fc(manager_state)
         m_inputs = (percept_m, m_lstm)
@@ -174,7 +190,7 @@ class FuN(nn.Module):
         goals_horizon = torch.cat([goals_horizon[:, 1:], goal.unsqueeze(1)], dim=1)
 
         w_inputs = (percept_z, w_lstm, goals_horizon)
-        policy, w_lstm, w_values = self.worker(w_inputs)
-        return policy, goal, goals_horizon, m_lstm, w_lstm, m_value, w_values, m_state
+        policy, new_w_lstm, w_values = self.worker(w_inputs)
+        return policy, goal, goals_horizon, m_lstm, new_w_lstm, m_value, w_values, m_state
 
 
