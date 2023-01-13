@@ -186,8 +186,14 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
 
             entropy_component = policies[key][i]*log_policies[key][i]
             entropy_component = sum(sum(entropy_component)) * args.entropy_coef
+            
             w_actor_loss[key].append(log_policies[key][i][0][actions[key][i]] * w_adv[key] - entropy_component)
+           
+        w_actor_loss[key] = torch.stack(w_actor_loss[key])    
         w_total_actor_loss[key] = -1* sum(w_actor_loss[key])
+        print(f'for {key} the  actors loss type  is {type(w_actor_loss[key])} and the data is {w_actor_loss[key]}')
+        print(f'for {key} the total actors loss type  is {type(w_total_actor_loss[key])}')
+
 
 
     w_total_critic_loss = {ids : [] for ids in Worker_IDs}
@@ -214,26 +220,39 @@ def train_model(net, optimizer, transition, args, Worker_IDs):
     weighted_worker_actor_loss = {}
     weighted_worker_critic_loss ={}
     for key, values in w_total_actor_loss.items():
-
+        print(f'for {key} the weights for loss is {worker_weights[key]} of type {type(worker_weights[key])}')
         weighted_worker_actor_loss[key] = worker_weights[key] * w_total_actor_loss[key]
         weighted_worker_critic_loss[key] = worker_weights[key] * w_total_critic_loss[key]
 
+    # w_total_actor_loss[key] = (w_actor_loss[key]*weight[key]).sum()
+    # The new weighted w_actor loss 
+    for key in w_actor_loss.keys(): 
+        w_total_actor_loss[key] = (w_actor_loss[key] * worker_weights[key]).sum().to(device) 
+
+        print(f'weighted sum of {key} is {w_total_actor_loss[key]} of type {type(w_total_actor_loss[key])}')
 
     # TODO: Add entropy to loss for exploration
     
     optimizer.zero_grad()
-    total_weighted_worker_actor_loss = sum(weighted_worker_actor_loss.values())
+    # total_weighted_worker_actor_loss = sum(weighted_worker_actor_loss.values())
     total_weighted_worker_critic_loss = sum(weighted_worker_critic_loss.values())
+    total_weighted_worker_actor_loss = sum(w_total_actor_loss.values())
     #For some reason, the workers' actors loss is sometimes getting NaN values... Ignore and pretend everything is ok!
     combined_loss = total_manager_loss + total_weighted_worker_critic_loss #+ total_weighted_worker_actor_loss
     #combined_loss.backward(retain_graph=True)
     # print(f'manager actor loss version {total_manager_actor_loss._version} manager critic loss version {total_manager_critic_loss._version}')
     # print(f'worker critic version {total_weighted_worker_critic_loss._version} worker actor version {total_weighted_worker_actor_loss._version}')
 
+    print(f'total managerr actor loss grad is {total_manager_actor_loss.grad}')
+    print(f'total managerr critic loss grad is {total_manager_critic_loss.grad}')
+    print(f'total worker critic loss grad is {total_weighted_worker_critic_loss.grad}')
     total_manager_actor_loss.backward(retain_graph=True)
+
     total_manager_critic_loss.backward(retain_graph=True)
     total_weighted_worker_critic_loss.backward(retain_graph=True)
-
+    
+    total_weighted_worker_actor_loss.retain_grad()
+    print(f'total weighted worker actor loss grad is {total_weighted_worker_actor_loss.grad}')
     total_weighted_worker_actor_loss.backward(retain_graph=True)
 
     grad_norm = get_grad_norm(net)
