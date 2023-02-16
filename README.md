@@ -1,3 +1,30 @@
+# The Real Setup 
+
+The package versions of the simulator are severely outdated. The Huwawei devs made a lot of changes on the main branch that will break the functionality for online learning, hence the setup can be quite painful. Check with `python3` version you're using; I've had issues with 3.10 so I recommend either `python3.7` or `python3.8`. Setup is as follows: 
+
+```bash 
+bash utils/setup/install_deps.sh #Runs a bash script that installs all appropriate linux dependencies 
+pip install -e '.[camera-obs,test,train]'
+pip install lark 
+```
+
+If some tests failed, do not worry. Make sure the simulator is working by running 
+
+```bash 
+scl scenario build --clean scenarios/intersections/4lane 
+scl run --envision examples/single_agent.py scenarios/intersections/4lane
+scl run main_feudal.py
+```
+
+To recreate the error, run the last command above. The error when calling backward should be: 
+
+```
+RuntimeError: Trying to backward through the graph a second time (or directly access saved tensors after they have already been freed). Saved intermediate values of the graph are freed when you call .backward() or autograd.grad(). Specify retain_graph=True if you need to backward through the graph a second time or if you need to access saved tensors after calling backward.
+```
+Strangely, when you return_graph with the actor_loss it does not crash. 
+
+
+
 # SMARTS
 [![SMARTS CI Base Tests Linux](https://github.com/huawei-noah/SMARTS/actions/workflows/ci-base-tests-linux.yml/badge.svg?branch=master)](https://github.com/huawei-noah/SMARTS/actions/workflows/ci-base-tests-linux.yml?query=branch%3Amaster) 
 [![SMARTS CI Format](https://github.com/huawei-noah/SMARTS/actions/workflows/ci-format.yml/badge.svg?branch=master)](https://github.com/huawei-noah/SMARTS/actions/workflows/ci-format.yml?query=branch%3Amaster)

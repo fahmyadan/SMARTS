@@ -85,7 +85,7 @@ setup(
             "pytest-benchmark>=3.4.1",
             "pytest-cov>=3.0.0",
             "pytest-notebook>=0.7.0",
-            "pytest-xdist>=2.4.0",
+            "pytest-xdist==2.4.0",
         ],
         "torch": [
             "torch==1.4.0",

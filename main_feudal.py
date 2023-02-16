@@ -13,6 +13,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
 
+
 from FUNRL.lstm_a2c.model1 import ManagerAC, WorkerAC
 from FUNRL.lstm_a2c.utils import *
 from FUNRL.lstm_a2c.train1 import calc_return, train_manager, train_worker
@@ -226,8 +227,8 @@ def main():
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = True
-    args.num_step = 3
-    args.headless = True 
+    args.num_step = None
+    args.headless = False 
     # args.headless = False
 
     worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
