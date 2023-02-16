@@ -1,38 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on Sat  1 Feb 12:57:47 2020 by Eclipse SUMO netedit Version 1.3.1
+<!-- generated on 2023-02-08 14:24:27 by Eclipse SUMO netedit Version v1_15_0+1170-ec1c637fa23
 <configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
 
     <input>
-        <sumo-net-file value="/Users/julian/src/HiWay/scenarios/intersection/map.net.xml"/>
+        <sumo-net-file value="/home/fahmy/PhD/Experiments/SMARTS/scenarios/intersections/4lane/map.net.xml"/>
     </input>
 
     <output>
-        <output-file value="/Users/julian/src/HiWay/scenarios/intersection/map.net.xml"/>
+        <output-file value="/home/fahmy/PhD/Experiments/SMARTS/scenarios/intersections/4lane/map.net.xml"/>
     </output>
 
     <processing>
+        <geometry.min-radius.fix.railways value="false"/>
         <geometry.max-grade.fix value="false"/>
         <offset.disable-normalization value="true"/>
-        <opposites.guess.fix-lengths value="true"/>
-        <lefthand value="false"/>
+        <lefthand value="0"/>
     </processing>
 
     <junctions>
         <no-turnarounds value="true"/>
         <junctions.corner-detail value="5"/>
-        <junctions.limit-turn-speed value="5.5"/>
-        <rectangular-lane-cut value="false"/>
+        <junctions.limit-turn-speed value="5.50"/>
+        <rectangular-lane-cut value="0"/>
     </junctions>
 
     <pedestrian>
-        <walkingareas value="false"/>
+        <walkingareas value="0"/>
     </pedestrian>
 
 </configuration>
 -->
 
-<net version="1.3" junctionCornerDetail="5" limitTurnSpeed="5.50" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
+<net version="1.9" junctionCornerDetail="5" limitTurnSpeed="5.50" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
 
     <location netOffset="-630882.85,-4856133.12" convBoundary="20.00,-130.00,220.00,10.00" origBoundary="-79.371708,43.846679,-79.369237,43.847436" projParameter="+proj=utm +zone=17 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"/>
 
@@ -73,86 +73,86 @@
         <lane id=":junction-intersection_0_0" index="0" speed="8.33" length="15.48" shape="145.20,-45.60 144.60,-49.80 142.80,-52.80 139.80,-54.60 135.60,-55.20"/>
     </edge>
     <edge id=":junction-intersection_1" function="internal">
-        <lane id=":junction-intersection_1_0" index="0" speed="13" length="28.80" shape="145.20,-45.60 145.20,-74.40"/>
-        <lane id=":junction-intersection_1_1" index="1" speed="13" length="28.80" shape="148.40,-45.60 148.40,-74.40"/>
+        <lane id=":junction-intersection_1_0" index="0" speed="13.00" length="28.80" shape="145.20,-45.60 145.20,-74.40"/>
+        <lane id=":junction-intersection_1_1" index="1" speed="13.00" length="28.80" shape="148.40,-45.60 148.40,-74.40"/>
     </edge>
     <edge id=":junction-intersection_3" function="internal">
-        <lane id=":junction-intersection_3_0" index="0" speed="10.62" length="8.24" shape="148.40,-45.60 149.40,-52.60 150.00,-53.60"/>
+        <lane id=":junction-intersection_3_0" index="0" speed="10.62" length="5.01" shape="148.40,-45.60 149.11,-50.56"/>
     </edge>
     <edge id=":junction-intersection_16" function="internal">
-        <lane id=":junction-intersection_16_0" index="0" speed="10.62" length="17.57" shape="150.00,-53.60 152.40,-57.60 157.40,-60.60 164.40,-61.60"/>
+        <lane id=":junction-intersection_16_0" index="0" speed="10.62" length="20.79" shape="149.11,-50.56 149.40,-52.60 152.40,-57.60 157.40,-60.60 164.40,-61.60"/>
     </edge>
     <edge id=":junction-intersection_4" function="internal">
         <lane id=":junction-intersection_4_0" index="0" speed="8.33" length="15.48" shape="164.40,-55.20 160.20,-54.60 157.20,-52.80 155.40,-49.80 154.80,-45.60"/>
     </edge>
     <edge id=":junction-intersection_5" function="internal">
-        <lane id=":junction-intersection_5_0" index="0" speed="13" length="28.80" shape="164.40,-55.20 135.60,-55.20"/>
-        <lane id=":junction-intersection_5_1" index="1" speed="13" length="28.80" shape="164.40,-58.40 135.60,-58.40"/>
+        <lane id=":junction-intersection_5_0" index="0" speed="13.00" length="28.80" shape="164.40,-55.20 135.60,-55.20"/>
+        <lane id=":junction-intersection_5_1" index="1" speed="13.00" length="28.80" shape="164.40,-58.40 135.60,-58.40"/>
     </edge>
     <edge id=":junction-intersection_7" function="internal">
-        <lane id=":junction-intersection_7_0" index="0" speed="10.62" length="8.24" shape="164.40,-58.40 157.40,-59.40 156.40,-60.00"/>
+        <lane id=":junction-intersection_7_0" index="0" speed="10.62" length="5.01" shape="164.40,-58.40 159.44,-59.11"/>
     </edge>
     <edge id=":junction-intersection_17" function="internal">
-        <lane id=":junction-intersection_17_0" index="0" speed="10.62" length="17.57" shape="156.40,-60.00 152.40,-62.40 149.40,-67.40 148.40,-74.40"/>
+        <lane id=":junction-intersection_17_0" index="0" speed="10.62" length="20.79" shape="159.44,-59.11 157.40,-59.40 152.40,-62.40 149.40,-67.40 148.40,-74.40"/>
     </edge>
     <edge id=":junction-intersection_8" function="internal">
         <lane id=":junction-intersection_8_0" index="0" speed="8.33" length="15.48" shape="154.80,-74.40 155.40,-70.20 157.20,-67.20 160.20,-65.40 164.40,-64.80"/>
     </edge>
     <edge id=":junction-intersection_9" function="internal">
-        <lane id=":junction-intersection_9_0" index="0" speed="13" length="28.80" shape="154.80,-74.40 154.80,-45.60"/>
-        <lane id=":junction-intersection_9_1" index="1" speed="13" length="28.80" shape="151.60,-74.40 151.60,-45.60"/>
+        <lane id=":junction-intersection_9_0" index="0" speed="13.00" length="28.80" shape="154.80,-74.40 154.80,-45.60"/>
+        <lane id=":junction-intersection_9_1" index="1" speed="13.00" length="28.80" shape="151.60,-74.40 151.60,-45.60"/>
     </edge>
     <edge id=":junction-intersection_11" function="internal">
-        <lane id=":junction-intersection_11_0" index="0" speed="10.62" length="8.24" shape="151.60,-74.40 150.60,-67.40 150.00,-66.40"/>
+        <lane id=":junction-intersection_11_0" index="0" speed="10.62" length="5.01" shape="151.60,-74.40 150.89,-69.44"/>
     </edge>
     <edge id=":junction-intersection_18" function="internal">
-        <lane id=":junction-intersection_18_0" index="0" speed="10.62" length="17.57" shape="150.00,-66.40 147.60,-62.40 142.60,-59.40 135.60,-58.40"/>
+        <lane id=":junction-intersection_18_0" index="0" speed="10.62" length="20.79" shape="150.89,-69.44 150.60,-67.40 147.60,-62.40 142.60,-59.40 135.60,-58.40"/>
     </edge>
     <edge id=":junction-intersection_12" function="internal">
         <lane id=":junction-intersection_12_0" index="0" speed="8.33" length="15.48" shape="135.60,-64.80 139.80,-65.40 142.80,-67.20 144.60,-70.20 145.20,-74.40"/>
     </edge>
     <edge id=":junction-intersection_13" function="internal">
-        <lane id=":junction-intersection_13_0" index="0" speed="13" length="28.80" shape="135.60,-64.80 164.40,-64.80"/>
-        <lane id=":junction-intersection_13_1" index="1" speed="13" length="28.80" shape="135.60,-61.60 164.40,-61.60"/>
+        <lane id=":junction-intersection_13_0" index="0" speed="13.00" length="28.80" shape="135.60,-64.80 164.40,-64.80"/>
+        <lane id=":junction-intersection_13_1" index="1" speed="13.00" length="28.80" shape="135.60,-61.60 164.40,-61.60"/>
     </edge>
     <edge id=":junction-intersection_15" function="internal">
-        <lane id=":junction-intersection_15_0" index="0" speed="10.62" length="8.24" shape="135.60,-61.60 142.60,-60.60 143.60,-60.00"/>
+        <lane id=":junction-intersection_15_0" index="0" speed="10.62" length="5.01" shape="135.60,-61.60 140.56,-60.89"/>
     </edge>
     <edge id=":junction-intersection_19" function="internal">
-        <lane id=":junction-intersection_19_0" index="0" speed="10.62" length="17.57" shape="143.60,-60.00 147.60,-57.60 150.60,-52.60 151.60,-45.60"/>
+        <lane id=":junction-intersection_19_0" index="0" speed="10.62" length="20.79" shape="140.56,-60.89 142.60,-60.60 147.60,-57.60 150.60,-52.60 151.60,-45.60"/>
     </edge>
 
     <edge id="edge-east-EW" from="junction-east" to="junction-intersection" priority="-1">
-        <lane id="edge-east-EW_0" index="0" speed="13" length="55.60" shape="220.00,-55.20 164.40,-55.20"/>
-        <lane id="edge-east-EW_1" index="1" speed="13" length="55.60" shape="220.00,-58.40 164.40,-58.40"/>
+        <lane id="edge-east-EW_0" index="0" speed="13.00" length="55.60" shape="220.00,-55.20 164.40,-55.20"/>
+        <lane id="edge-east-EW_1" index="1" speed="13.00" length="55.60" shape="220.00,-58.40 164.40,-58.40"/>
     </edge>
     <edge id="edge-east-WE" from="junction-intersection" to="junction-east" priority="-1">
-        <lane id="edge-east-WE_0" index="0" speed="13" length="55.60" shape="164.40,-64.80 220.00,-64.80"/>
-        <lane id="edge-east-WE_1" index="1" speed="13" length="55.60" shape="164.40,-61.60 220.00,-61.60"/>
+        <lane id="edge-east-WE_0" index="0" speed="13.00" length="55.60" shape="164.40,-64.80 220.00,-64.80"/>
+        <lane id="edge-east-WE_1" index="1" speed="13.00" length="55.60" shape="164.40,-61.60 220.00,-61.60"/>
     </edge>
     <edge id="edge-north-NS" from="junction-north" to="junction-intersection" priority="-1">
-        <lane id="edge-north-NS_0" index="0" speed="13" length="55.60" shape="145.20,10.00 145.20,-45.60"/>
-        <lane id="edge-north-NS_1" index="1" speed="13" length="55.60" shape="148.40,10.00 148.40,-45.60"/>
+        <lane id="edge-north-NS_0" index="0" speed="13.00" length="55.60" shape="145.20,10.00 145.20,-45.60"/>
+        <lane id="edge-north-NS_1" index="1" speed="13.00" length="55.60" shape="148.40,10.00 148.40,-45.60"/>
     </edge>
     <edge id="edge-north-SN" from="junction-intersection" to="junction-north" priority="-1">
-        <lane id="edge-north-SN_0" index="0" speed="13" length="55.60" shape="154.80,-45.60 154.80,10.00"/>
-        <lane id="edge-north-SN_1" index="1" speed="13" length="55.60" shape="151.60,-45.60 151.60,10.00"/>
+        <lane id="edge-north-SN_0" index="0" speed="13.00" length="55.60" shape="154.80,-45.60 154.80,10.00"/>
+        <lane id="edge-north-SN_1" index="1" speed="13.00" length="55.60" shape="151.60,-45.60 151.60,10.00"/>
     </edge>
     <edge id="edge-south-NS" from="junction-intersection" to="junction-south" priority="-1">
-        <lane id="edge-south-NS_0" index="0" speed="13" length="55.60" shape="145.20,-74.40 145.20,-130.00"/>
-        <lane id="edge-south-NS_1" index="1" speed="13" length="55.60" shape="148.40,-74.40 148.40,-130.00"/>
+        <lane id="edge-south-NS_0" index="0" speed="13.00" length="55.60" shape="145.20,-74.40 145.20,-130.00"/>
+        <lane id="edge-south-NS_1" index="1" speed="13.00" length="55.60" shape="148.40,-74.40 148.40,-130.00"/>
     </edge>
     <edge id="edge-south-SN" from="junction-south" to="junction-intersection" priority="-1">
-        <lane id="edge-south-SN_0" index="0" speed="13" length="55.60" shape="154.80,-130.00 154.80,-74.40"/>
-        <lane id="edge-south-SN_1" index="1" speed="13" length="55.60" shape="151.60,-130.00 151.60,-74.40"/>
+        <lane id="edge-south-SN_0" index="0" speed="13.00" length="55.60" shape="154.80,-130.00 154.80,-74.40"/>
+        <lane id="edge-south-SN_1" index="1" speed="13.00" length="55.60" shape="151.60,-130.00 151.60,-74.40"/>
     </edge>
-    <edge id="edge-west-EW" from="junction-intersection" to="junction-west" priority="-1">
-        <lane id="edge-west-EW_0" index="0" speed="13" length="115.60" shape="135.60,-55.20 20.00,-55.20"/>
-        <lane id="edge-west-EW_1" index="1" speed="13" length="115.60" shape="135.60,-58.40 20.00,-58.40"/>
+    <edge id="edge-west-EW" from="junction-intersection" to="junction-west" priority="-1" length="70.00">
+        <lane id="edge-west-EW_0" index="0" speed="13.00" length="70.00" shape="135.60,-55.20 20.00,-55.20"/>
+        <lane id="edge-west-EW_1" index="1" speed="13.00" length="70.00" shape="135.60,-58.40 20.00,-58.40"/>
     </edge>
-    <edge id="edge-west-WE" from="junction-west" to="junction-intersection" priority="-1">
-        <lane id="edge-west-WE_0" index="0" speed="13" length="115.60" shape="20.00,-64.80 135.60,-64.80"/>
-        <lane id="edge-west-WE_1" index="1" speed="13" length="115.60" shape="20.00,-61.60 135.60,-61.60"/>
+    <edge id="edge-west-WE" from="junction-west" to="junction-intersection" priority="-1" length="70.00">
+        <lane id="edge-west-WE_0" index="0" speed="13.00" length="70.00" shape="20.00,-64.80 135.60,-64.80"/>
+        <lane id="edge-west-WE_1" index="1" speed="13.00" length="70.00" shape="20.00,-61.60 135.60,-61.60"/>
     </edge>
 
     <tlLogic id="junction-intersection" type="static" programID="0" offset="0">
@@ -185,10 +185,10 @@
     <junction id="junction-south" type="dead_end" x="150.00" y="-130.00" incLanes="edge-south-NS_0 edge-south-NS_1" intLanes="" shape="150.00,-130.00 143.60,-130.00 150.00,-130.00"/>
     <junction id="junction-west" type="dead_end" x="20.00" y="-60.00" incLanes="edge-west-EW_0 edge-west-EW_1" intLanes="" shape="20.00,-60.00 20.00,-53.60 20.00,-60.00"/>
 
-    <junction id=":junction-intersection_16_0" type="internal" x="150.00" y="-53.60" incLanes=":junction-intersection_3_0 edge-south-SN_0 edge-south-SN_1" intLanes=":junction-intersection_5_0 :junction-intersection_5_1 :junction-intersection_7_0 :junction-intersection_8_0 :junction-intersection_9_0 :junction-intersection_9_1 :junction-intersection_13_0 :junction-intersection_13_1 :junction-intersection_15_0"/>
-    <junction id=":junction-intersection_17_0" type="internal" x="156.40" y="-60.00" incLanes=":junction-intersection_7_0 edge-west-WE_0 edge-west-WE_1" intLanes=":junction-intersection_1_0 :junction-intersection_1_1 :junction-intersection_3_0 :junction-intersection_9_0 :junction-intersection_9_1 :junction-intersection_11_0 :junction-intersection_12_0 :junction-intersection_13_0 :junction-intersection_13_1"/>
-    <junction id=":junction-intersection_18_0" type="internal" x="150.00" y="-66.40" incLanes=":junction-intersection_11_0 edge-north-NS_0 edge-north-NS_1" intLanes=":junction-intersection_0_0 :junction-intersection_1_0 :junction-intersection_1_1 :junction-intersection_5_0 :junction-intersection_5_1 :junction-intersection_7_0 :junction-intersection_13_0 :junction-intersection_13_1 :junction-intersection_15_0"/>
-    <junction id=":junction-intersection_19_0" type="internal" x="143.60" y="-60.00" incLanes=":junction-intersection_15_0 edge-east-EW_0 edge-east-EW_1" intLanes=":junction-intersection_1_0 :junction-intersection_1_1 :junction-intersection_3_0 :junction-intersection_4_0 :junction-intersection_5_0 :junction-intersection_5_1 :junction-intersection_9_0 :junction-intersection_9_1 :junction-intersection_11_0"/>
+    <junction id=":junction-intersection_16_0" type="internal" x="149.11" y="-50.56" incLanes=":junction-intersection_3_0 edge-south-SN_0 edge-south-SN_1" intLanes=":junction-intersection_5_0 :junction-intersection_5_1 :junction-intersection_7_0 :junction-intersection_8_0 :junction-intersection_9_0 :junction-intersection_9_1 :junction-intersection_13_0 :junction-intersection_13_1 :junction-intersection_15_0"/>
+    <junction id=":junction-intersection_17_0" type="internal" x="159.44" y="-59.11" incLanes=":junction-intersection_7_0 edge-west-WE_0 edge-west-WE_1" intLanes=":junction-intersection_1_0 :junction-intersection_1_1 :junction-intersection_3_0 :junction-intersection_9_0 :junction-intersection_9_1 :junction-intersection_11_0 :junction-intersection_12_0 :junction-intersection_13_0 :junction-intersection_13_1"/>
+    <junction id=":junction-intersection_18_0" type="internal" x="150.89" y="-69.44" incLanes=":junction-intersection_11_0 edge-north-NS_0 edge-north-NS_1" intLanes=":junction-intersection_0_0 :junction-intersection_1_0 :junction-intersection_1_1 :junction-intersection_5_0 :junction-intersection_5_1 :junction-intersection_7_0 :junction-intersection_13_0 :junction-intersection_13_1 :junction-intersection_15_0"/>
+    <junction id=":junction-intersection_19_0" type="internal" x="140.56" y="-60.89" incLanes=":junction-intersection_15_0 edge-east-EW_0 edge-east-EW_1" intLanes=":junction-intersection_1_0 :junction-intersection_1_1 :junction-intersection_3_0 :junction-intersection_4_0 :junction-intersection_5_0 :junction-intersection_5_1 :junction-intersection_9_0 :junction-intersection_9_1 :junction-intersection_11_0"/>
 
     <connection from="edge-east-EW" to="edge-north-SN" fromLane="0" toLane="0" via=":junction-intersection_4_0" tl="junction-intersection" linkIndex="4" dir="r" state="o"/>
     <connection from="edge-east-EW" to="edge-west-EW" fromLane="0" toLane="0" via=":junction-intersection_5_0" tl="junction-intersection" linkIndex="5" dir="s" state="o"/>

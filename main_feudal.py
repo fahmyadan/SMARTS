@@ -13,9 +13,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
 
-from FUNRL.lstm_a2c.model import FuN
+from FUNRL.lstm_a2c.model1 import ManagerAC, WorkerAC
 from FUNRL.lstm_a2c.utils import *
-from FUNRL.lstm_a2c.train import train_model
+from FUNRL.lstm_a2c.train1 import calc_return, train_manager, train_worker
 from FUNRL.lstm_a2c.memory import Memory
 
 from data_utils import *
@@ -36,6 +36,8 @@ from smarts.core.sumo_traffic_simulation import SumoTrafficSimulation
 from sumo_interfacing import TraciMethods
 from risk_indices import *
 import os
+
+torch.autograd.set_detect_anomaly(True)
 
 
 parser = argparse.ArgumentParser()
@@ -68,13 +70,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class WorkerAgent(Agent):
     def act(self, actions):
         lane_actions = {0: 'keep_lane', 1: 'slow_down', 2: 'change_lane_left', 3: 'change_lane_right'}
-        w_actions ={}
-        for key, value in actions.items():
-            w_actions[key] = lane_actions[value]
-        # print(w_actions)
-        return w_actions
 
-N_Workers = 4
+        worker_lane_actions = lane_actions[actions]
+
+        return worker_lane_actions
+
+N_Workers = 1
 Worker_IDS = [f'Worker_{i}' for i in range(1,N_Workers+1)]
 
 
@@ -101,18 +102,9 @@ def observation_adapter(env_obs):
 To Do: Implement one reward for manager and workers
 """
 def reward_adapter(env_obs, env_reward):
-    # adapt_obs = observation_adapter(env_obs)
-    # obs_ttc = adapt_obs['ego_ttc']
-    # obs_ttc_dist = adapt_obs['ego_lane_dist']
-    # for ttc in obs_ttc:
-    #     if ttc > ttc_threshold:
-    #         env_reward = -1
-    #         return env_reward
-    #
-    # ttc_norm = obs_ttc.mean()/max(obs_ttc)
-    # ttc_dist_norm = obs_ttc_dist.mean()/max(obs_ttc_dist)
-    # env_reward = (ttc_weight *ttc_norm) + (ttc_dist_weight*ttc_dist_norm) + env_obs.distance_travelled
+
     if len(env_obs.events.collisions )!= 0:
+        print('Negative reward activated')
         env_reward = -100
 
     return env_reward
@@ -215,22 +207,27 @@ def compute_risk_indices(traci_conn, veh_list):
         risk_index_lat = max(r_lat_left, r_lat_right)
         uni_risk_index = risk_index_unified(risk_index_lon, risk_index_lat)
         ttc = min(ttc_front, ttc_rear, ttc_left, ttc_right)
-        # print(veh1, uni_risk_index, ttc, drac_index)
+        # if drac_index or uni_risk_index > 0 : 
+
+            # print(f'Risk Indices for {veh1} {uni_risk_index, ttc, drac_index}')
 
 """Test Commit"""
+"""
+TODO: The Manager's output/action should provide some semantic meaning to the worker and the environment. Maybe stop/slow down/speed up??  
+"""
 def main():
     writer = SummaryWriter('logs')
     scenario_dir = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenarios'), 'intersections/4lane')
     # parser = default_argument_parser("feudal-learning")
     # args = parser.parse_args()
-    args.scenarios = [scenario_dir]  #Relative file path To Do: Change to absolute
+    args.scenarios = [scenario_dir]  
     args.horizon = 9
     args.save_path = './save_model/'
     args.num_envs = 1
     args.env_name = "smarts.env:hiway-v0"
     args.render = True
-    args.num_step = 50
-    args.headless = True
+    args.num_step = 3
+    args.headless = True 
     # args.headless = False
 
     worker_interface = AgentInterface(debug=True, waypoints=True, action=ActionSpaceType.Lane,
@@ -251,43 +248,51 @@ def main():
         sumo_headless=True,
         sumo_port= 45761
     )
+    env = SingleAgent(env=env)
+
     env.seed(500)
     torch.manual_seed(500)
 
-    observation_size = 13 + (5*3)  #13 + xyz position of N=5 neighbor vehicles
+    observation_size = 15  
     manager_obs_size = 17 #(8queue + 8 wait + 1 cumm loss)
     num_actions = 4
+    manager_policy_size = 5 
+    manager_sampled_action = 1 
     print('observation size:', observation_size)
     print('action size:', num_actions)
     print("cuda is ", torch.cuda.is_available())
     print(device)
 
-    #Instantiate the FuN model object (Creating the percept, manager and worker in the __init__)
-    net = FuN(observation_size, num_actions, args.horizon, N_Workers, manager_obs_size=manager_obs_size)
-    optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
+    # Instantiate Manager + Worker model 
 
-    net.to(device)
-    net.train()
+    manager_net = ManagerAC(manager_in_size=manager_obs_size,actor_out_size=manager_policy_size, hidden_size= 10)
+    manager_optim = optim.Adam(manager_net.parameters(), lr= 5e-2)
+    manager_critic_optim = optim.Adam(manager_net.critic.parameters(), lr=5e-2)
+    manager_actor_optim = optim.Adam(manager_net.actor.parameters(), lr=5e-2)
+
+    worker_net = WorkerAC(worker_action_size=num_actions, worker_raw_obs_size=observation_size, manager_action_size=manager_sampled_action)
+    worker_optim = optim.Adam(worker_net.parameters(), lr= 5e-2)
+
+    manager_net.to(device=device)
+    manager_net.train()
+    worker_net.to(device=device)
+    worker_net.train()
+    
     count = 1
     grad_norm = 0
-    state = torch.zeros([observation_size,observation_size]).to(device)
 
-    #Initialize hidden and cell state of Manager and Worker
-    m_lstm, w_hx, w_cx = init_lstm_weights(args.num_envs, num_actions, k=16, device=device)
-    w_lstm = {key : (w_hx, w_cx) for key in Worker_IDS}
-    goals_horizon = torch.zeros(args.num_envs, args.horizon + 1, num_actions * 16).to(device)
+    manager_loss_history = []
+    worker1_loss_history = []
+    worker2_loss_history = []
 
-    score_history = {w_id: [] for w_id in Worker_IDS}
-
-
-    loss_history = []
-
+    manager_memory = Memory()
+    worker_memory = Memory()
     avg_worker_reward_history =[]
     #episodic_queues =
     for episode in episodes(n=args.num_episodes):
         print(f'episode count {count}')
         avg_episode_reward = []
-        memory = Memory()
+
         #Build the agent @ the start of each episode
         agents = {
             agent_id: agent_spec.build_agent()
@@ -314,47 +319,60 @@ def main():
 
         #Initialise 0 score/reward for all workers
         score = 0
-        scores = {keys: score for keys in observations.keys()}
 
-        worker_tensors = worker_observations(observations, device)
 
-        manager_state = np.vstack((all_queues,all_wait,cumm_timeloss))
-        # for key, value in observations.items():
-        #     manager_state[key] = value[0].ego_vehicle_state.linear_velocity
-        #
-        # m_avg_velocity = sum(manager_state.values())/N_Workers
-        #Process the data from tuple to list for mutability
-        worker_states = process_w_states(worker_tensors, device)
-        #Pad Neighbor pos with 0z if <5
-        worker_states = zero_padding(worker_states,neighbour_idx=7,n_neighbours=5)
+        # worker_tensors = multi_worker_observations(observations, device)
 
-        #Concatenate worker states into (1,observation_size)) tensor
-        worker_states = concat_states(worker_states, observation_size)
+        worker_state = worker_obs_to_tensor(observations).to(device, torch.float32)
+        worker_state_tensors = worker_state.reshape(1, observation_size)
 
-        man_states = torch.Tensor(manager_state).to(device)
+
+
+
+        manager_state = torch.from_numpy(np.vstack((all_queues,all_wait,cumm_timeloss))).to(device, torch.float32)
+        manager_state_tensors = manager_state.reshape(1,manager_obs_size)
+
+        
+
         episode.record_scenario(env.scenario_log)
         steps = 0
-        
-        for i in range(args.num_step):
+
+        done = False
+
+        while not done:
             print(f'forward pass {steps}')
-            net_output = net.forward(manager_state=man_states, w_states=worker_states, m_lstm=m_lstm, w_lstm=w_lstm,
-                                     goals_horizon=goals_horizon, N_workers=N_Workers, num_actions=num_actions, device=device)
-            policies, goal, goals_horizon, m_lstm, new_w_lstm, m_value, w_values , m_state = net_output
-            actions, policies, entropy = get_action(policies, num_actions)
-            """
-            To Do: Fix the discrepancy between man_state and m_state in the model 
-            """
+            manager_net_parameters = dict(manager_net.named_parameters())
+
+            manager_out = manager_net(manager_state_tensors)
+            managers_policy_latent_state, manager_state_value = manager_out
+
+            manager_action, manager_entropy, manager_log_prob = select_manager_action(managers_policy_latent_state)
+
+            manager_action_out = manager_action.reshape(1,1)
+            
+            # TODO: Input to workerAC is manager's policy as opposed to sampled action. Investigate if replacing with action helps.  
+
+            combined_obs = torch.cat([worker_state_tensors, manager_action_out], dim=1) 
+
+            worker_out = worker_net(combined_obs)
+
+            worker_policy_probs, worker_state_value = worker_out
+
+            worker_actions, worker_entropy, worker_log_prob = select_worker_action(worker_policy=worker_policy_probs) 
+
+            
+            # actions, policies, entropy = get_action(policies, num_actions)
+
             if args.render:
                 env.render()
-            #Step the environment by taking the actions predicted by FuN model.
-            #observation, reward, done, info = env.step({'SingleAgent': actions})
-            # for key in agents.keys():
-            #     agents[key] = agents[key].act()
 
-            w_act = [agent.act(actions) for agent in agents.values()]
 
-            observations, reward, done, info = env.step(w_act[0])
-            #traci observations
+            worker_lane_actions = agents['Worker_1'].act(worker_actions)
+            
+
+            observations, reward, done, info = env.step(worker_lane_actions)
+            
+
             traci_conn = env.get_info()
             veh_list = TraciMethods(traci_conn).get_vehicle_list()
             print("check2", len(veh_list))
@@ -367,102 +385,80 @@ def main():
             new_all_wait = [i for i in new_edge_wait.values()]
             new_all_wait = np.asarray(new_all_wait).reshape(8, 1)
             new_cumm_timeloss = np.asarray(TraciMethods(traci_conn).get_cumm_timeloss(veh_list))
-            """
-            Compute manager reward after some time step, dt
-            """
+
 
             junction_manager_reward = manager_reward(queues=new_all_queues, wait_time=new_all_wait,
                                                      time_loss=new_cumm_timeloss)
 
-            #Record the new state after taking an action
-            new_w_tensor= worker_observations(observations, device)
-            new_w_tensor= process_w_states(new_w_tensor, device)
-            new_w_states= zero_padding(new_w_tensor, neighbour_idx=7, n_neighbours=5)
-            new_w_states= concat_states(new_w_states, observation_size)
+            junction_manager_reward_tensor = torch.from_numpy(junction_manager_reward).to(device, torch.float32)
+            #Record the new worker and manager state after taking an action
+
+            new_worker_state = worker_obs_to_tensor(observations) 
+            new_worker_state_tensor = new_worker_state.to(device, torch.float32).reshape(1,observation_size)
+
 
             new_manager_state = np.vstack((new_all_queues, new_all_wait, new_cumm_timeloss))
-            new_man_state = torch.Tensor(new_manager_state).to(device)
+            new_manager_state_tensor = torch.from_numpy(new_manager_state).to(device, torch.float32).reshape(1,manager_obs_size)
 
-            """    
-            To Do: Review w-state & m-state to find out why model states do not change at each step 
-            """
-            #Increment steps and sum the reward
+
+            #Increment steps 
             steps += 1
 
-            for key in reward.keys():
-                score_history[key].append(reward.get(key))
 
             episode.record_step(observations, reward, done, info)
 
-            """
-            To Do: Pass manager and worker states to GPU
-            """
+            reward_tensors = torch.Tensor([reward]).to(device, torch.float32)
 
-            reward = {key: np.asarray([value]) for key, value in reward.items()}
 
-            mask = np.asarray([1])
 
-            memory.push(worker_states, man_states, new_w_states, new_man_state,
-                        actions, reward, junction_manager_reward ,mask, goal,
-                        policies, m_lstm, new_w_lstm, m_value, w_values, m_state, entropy)
-            if done['__all__']:
-                break
-            #End of step loop, assign the state to be passed to FuN(manager and worker) as the most recent state and repeat loop.
-            worker_states= new_w_states
-            man_states = new_man_state
-            w_lstm = new_w_lstm
+            mask = torch.ones(1).to(device)
+
+
+            manager_memory.push(manager_state_tensors, manager_action_out, new_manager_state_tensor, junction_manager_reward_tensor, mask, managers_policy_latent_state,
+                                manager_log_prob, manager_state_value.detach(), manager_entropy)
+
+            
+            worker_memory.push(worker_state_tensors, worker_actions, new_worker_state_tensor, reward_tensors, mask, worker_policy_probs, worker_log_prob ,worker_state_value, worker_entropy)
+
+            worker_state_tensors = new_worker_state_tensor
+            manager_state_tensors = new_manager_state_tensor
+
+            episode.record_step(observations, reward, done, info)
+
+        print('Exited step loop ')
+        if done:
+
+            print(f'agent_action are {worker_lane_actions} | global steps {steps} | last_score: {reward} | entropy: {worker_entropy} | grad norm: {grad_norm} | policy {worker_policy_probs}')
+       
+            writer.add_scalar('log/score', reward, steps)
+            
         
-     
+        manager_transitions = manager_memory.sample()
+        worker_transitions = worker_memory.sample()
 
-            """
-            To Do: Check if entropy should be > 1 ???
-            """
-            # traci.close()
-        #If done criteria == True, calculate entropy -> H(x) = -P * log(P)
-        
-        if done['__all__']:
-            for key, value in entropy.items():
-                entropy[key] = -policies[key] * torch.log(policies[key]+ 1e-5)
-                entropy[key] = entropy[key].mean().data.cpu()
+        manager_AC_loss = train_manager(manager_net, manager_critic_optim, manager_transitions, args)
 
-            # entropy = - policies * torch.log(policies + 1e-5)
-            # entropy = entropy.mean().data.cpu()
-            plcy ={}
-            for key, value in policies.items():
-                plcy[key] = value.tolist()[0]
-            print('action are {} | global steps {} | score: {} | entropy: {} | grad norm: {} | policy {}'.format(w_act[0],steps,
-                                                                                             scores, entropy,
-                                                                                              grad_norm, policies))
-            if i == 0:
-                writer.add_scalar('log/score', score[i], steps)
+        count+=1
 
-        transitions = memory.sample()
-        #print('training model called')
-        loss, grad_norm = train_model(net, optimizer, transitions, args, Worker_IDS)
-        print(f'training check {count}')
-        loss_history.append(loss.item())
-        m_hx, m_cx = m_lstm
-        m_lstm = (m_hx.detach(), m_cx.detach())
-        #w_hx, w_cx = w_lstm
-        #w_lstm = (w_hx.detach(), w_cx.detach())
-        goals_horizon = goals_horizon.detach()
 
-        if count % args.save_interval == 0:
-            ckpt_path = args.save_path + 'model.pt'
-            torch.save(net.state_dict(), ckpt_path)
+        print(f'reward for in last episode {reward} ')
+       
+        manager_loss_history.append(manager_AC_loss)
+
+
+        # if count % args.save_interval == 0:
+        #     ckpt_path = args.save_path + 'model.pt'
+        #     torch.save(net.state_dict(), ckpt_path)
         """    
         Calculate avg worker reward per episode
         """
-        for vals in score_history.values():
-            worker_total_reward = sum(vals)
-            avg_episode_reward.append(worker_total_reward)
 
-        avg_episode_reward = sum(avg_episode_reward)/N_Workers
-        avg_worker_reward_history.append(avg_episode_reward)
-        count+=1 
-        if count == 2: 
-            print('next episode')
-        print('episode reset')
+        # avg_episode_reward = sum(avg_episode_reward)/N_Workers
+        # avg_worker_reward_history.append(avg_episode_reward)
+        # count+=1 
+        # if count == 2: 
+        #     print('next episode')
+        # print('episode reset')
 
 
     print(f'size of avg_worker_reward is {len(avg_worker_reward_history)} and num_episode is {args.num_episodes}')
@@ -472,7 +468,7 @@ def main():
     plt.xlabel('Episodes')
     plt.ylabel('Reward')
     plt.show()
-    plt.plot(range(args.num_episodes), loss_history)
+    plt.plot(range(args.num_episodes), manager_loss_history)
     plt.title('Losses per episode')
     plt.xlabel('Episodes')
     plt.ylabel('Loss')

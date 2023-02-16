@@ -3,13 +3,8 @@ import numpy as np
 # from skimage.color import rgb2gray
 # from skimage.transform import resize
 from torch.distributions import Categorical
+from typing import Dict, Tuple, List, Any, Sequence
 
-
-def pre_process(image):
-    image = np.array(image)
-    image = resize(image, (84, 84, 3))
-    # image = rgb2gray(image)
-    return image
 
 
 def get_action(policies, num_actions):
@@ -30,6 +25,30 @@ def get_action(policies, num_actions):
     # actions = actions.data.cpu().numpy()
     # actions = int(actions)
     return actions, policies, entropy
+
+def select_worker_action(worker_policy: torch.Tensor) -> Tuple[int, torch.Tensor, torch.Tensor] :
+    
+    m = Categorical(worker_policy)
+
+    action = m.sample()
+    worker_action = int(action)
+    worker_entropy = m.entropy()
+    
+    worker_log_prob = m.log_prob(action)
+
+    return worker_action, worker_entropy, worker_log_prob
+
+def select_manager_action(manager_policy:torch.Tensor):
+
+    m =  Categorical(manager_policy)
+
+    manager_action = m.sample()
+    
+    manager_entropy = m.entropy()
+
+    manager_log_prob = m.log_prob(manager_action)
+
+    return manager_action, manager_entropy, manager_log_prob
 
 
 def get_grad_norm(model):

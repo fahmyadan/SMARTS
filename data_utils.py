@@ -17,8 +17,19 @@ def init_lstm_weights(num_envs, num_actions, k, device):
 
     return m_lstm, w_hx, w_cx
 
+def worker_obs_to_tensor(obs: Tuple[Observation,Dict[str, np.ndarray]]) -> torch.Tensor: 
 
-def worker_observations(obs: Dict[str,Tuple[Observation,Dict[str, Any]]], device):
+    worker_state = [torch.from_numpy(obs[0].ego_vehicle_state.position),
+                    torch.from_numpy(obs[0].ego_vehicle_state.linear_velocity),
+                    torch.from_numpy(obs[0].ego_vehicle_state.linear_acceleration), 
+                    torch.from_numpy(obs[0].ego_vehicle_state.angular_velocity), 
+                    torch.from_numpy(obs[1]['ego_ttc'])]
+
+
+    worker_tensors = torch.cat(worker_state)
+    return worker_tensors
+
+def multi_worker_observations(obs: Dict[str,Tuple[Observation,Dict[str, Any]]], device):
     worker_states = {}
     for key, value in obs.items():
         worker_states[key] = [value[1], value[0].ego_vehicle_state.position,
@@ -108,7 +119,7 @@ def concat_states(worker_states, observation_size):
                 worker_states[key][1]= worker_states[key][1].reshape(15,1)
                 worker_states[key] = torch.cat(worker_states[key][0:2]).reshape(1, observation_size)
         else:
-            worker_states[key] = torch.cat(worker_states[key][0:2]).reshape(1, observation_size)
+            worker_states[key] = torch.cat(worker_states[key][0:2]).reshape(observation_size,1)
     return worker_states
 
 #Plot moving average of reward every n steps

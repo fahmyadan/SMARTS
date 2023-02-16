@@ -2,14 +2,15 @@ import pathlib
 
 import gym
 
-from examples.argument_parser import default_argument_parser
+# from examples.argument_parser import default_argument_parser
+from argument_parser import default_argument_parser
 from smarts.core.agent import Agent
 from smarts.core.agent_interface import AgentInterface, AgentType
 from smarts.core.utils.episodes import episodes
 from smarts.sstudio import build_scenario
 from smarts.zoo.agent_spec import AgentSpec
 
-N_AGENTS = 4
+N_AGENTS = 2
 AGENT_IDS = ["Agent %i" % i for i in range(N_AGENTS)]
 
 
@@ -36,14 +37,16 @@ def main(scenarios, headless, num_episodes, max_episode_steps=None):
         headless=headless,
         sumo_headless=True,
     )
-
+    episode_no = 0
     for episode in episodes(n=num_episodes):
+        print(f'new episode {episode_no}')
         agents = {
             agent_id: agent_spec.build_agent()
             for agent_id, agent_spec in agent_specs.items()
         }
         observations = env.reset()
         episode.record_scenario(env.scenario_log)
+        
 
         dones = {"__all__": False}
         while not dones["__all__"]:
@@ -53,14 +56,18 @@ def main(scenarios, headless, num_episodes, max_episode_steps=None):
             }
 
             observations, rewards, dones, infos = env.step(actions)
-            episode.record_step(observations, rewards, dones, infos)
+            print(f'in loop {dones}')
 
+            episode.record_step(observations, rewards, dones, infos)
+        print(f'out of loop dones {dones}')
+        episode_no+=1
     env.close()
 
 
 if __name__ == "__main__":
     parser = default_argument_parser("multi-agent-example")
     args = parser.parse_args()
+    
 
     if not args.scenarios:
         args.scenarios = [
