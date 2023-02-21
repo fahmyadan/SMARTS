@@ -29,6 +29,9 @@ from smarts.sstudio import build_scenario
 from smarts.zoo.agent_spec import AgentSpec
 from smarts.env.custom_observations import lane_ttc_observation_adapter
 
+# Risk indices functions 
+from risk_indices.risk_obs import risk_obs
+
 
 
 parser = argparse.ArgumentParser(description='SMARTS Actor Critic Implementation')
@@ -78,7 +81,9 @@ ttc_dist_weight = 0.9
 
 def observation_adapter(env_obs):
     ttc_obs = lane_ttc_observation_adapter.transform(env_obs)
-    return env_obs, ttc_obs
+
+    risk_dict = risk_obs(env_obs)
+    return env_obs, ttc_obs, risk_dict
 
 def reward_adapter(env_obs, env_reward):
 
@@ -119,7 +124,7 @@ def main():
     args.num_episodes = 500
 
     # a2c_agent_interface = AgentInterface(action=ActionSpaceType.Lane, max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
-    a2c_agent_interface = AgentInterface.from_type(requested_type=AgentType.Laner, neighborhood_vehicles=True)
+    a2c_agent_interface = AgentInterface.from_type(requested_type=AgentType.Laner, neighborhood_vehicles=NeighborhoodVehicles(radius=100))
     a2c_agent_spec = AgentSpec(interface=a2c_agent_interface, agent_builder=LaneAgent, reward_adapter=reward_adapter, observation_adapter=observation_adapter)
 
     agent_specs = {agent_id: a2c_agent_spec for agent_id in agent_ids}
