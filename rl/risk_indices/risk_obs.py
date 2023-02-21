@@ -82,10 +82,14 @@ def risk_obs(obs: Observation):
 
     _risk_long_inputs = front_check(local_frame_paras) 
 
-    if len(neighbors) > 3: 
-        front_check(local_frame_paras) 
-        print('check') 
-        print(f'ego frame dist {local_frame_dist_dict}')
+    _risk_lat_inputs = left_check(local_frame_paras)
+
+    #TODO:Compute d_long min and d_lat min 
+
+    # if len(neighbors) > 3: 
+    #     front_check(local_frame_paras) 
+    #     print('check') 
+    #     print(f'ego frame dist {local_frame_dist_dict}')
         # time.sleep(5)
     
 
@@ -106,7 +110,7 @@ def front_check(local_frame):
 
         local_dist, local_vels, ego_vel  = vals
         d_long_curr = local_dist[1]
-        if d_long_curr > 0: 
+        if d_long_curr >= 0:  #Neighbor in front
             v_f = np.linalg.norm(local_vels)
             v_r = np.linalg.norm(ego_vel)
             risk_long_inp[keys] = (v_f, v_r, d_long_curr)
@@ -118,14 +122,30 @@ def front_check(local_frame):
     return risk_long_inp
 
 
-def left_check(local_frame, traci_conn):
+def left_check(local_frame):
 
     risk_lat_inputs = {} 
 
-    
-    
+    for keys, vals in local_frame.items():
+        local_dist, local_vels, ego_vel  = vals
 
-    return None
+        d_lat_curr =  local_dist[0] 
+
+        if d_lat_curr >= 0: #Neighbor on RHS
+            v_lhs = ego_vel[1]
+            v_rhs = local_vels[0]
+            risk_lat_inputs[keys] = (v_lhs, v_rhs, d_lat_curr)
+        else: 
+            v_lhs = local_vels[0]
+            v_rhs = ego_vel[1]
+            risk_lat_inputs[keys] = (v_lhs, v_rhs, d_lat_curr)
+
+    return risk_lat_inputs
+
+
+
+
+        
 
 
             
