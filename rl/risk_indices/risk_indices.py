@@ -1,5 +1,6 @@
 import numpy as np
-
+from typing import Dict, Sequence, Tuple 
+import time
 ### CONSTANTS
 
 # time it takes rear car to react and begin braking (both longitudinal and lateral)
@@ -50,9 +51,10 @@ TTC_THRESHOLD = 5
 
 
 # Function to calculate safe longitudinal distance
-def safe_lon_distances(speed_front, speed_rear):
+def safe_lon_distances(risk_long_inputs):
     """
     All speed and acceleration inputs must be for the longitudinal axis
+    RISK_LONG_INPUTS : {'neighbor_id': (speed_front, speed_rear, d_long_curr)...} 
     responseTime: time it takes rear car to react and begin braking
     speedFront: current velocity of front car
     accFront: current accelaration of front car
@@ -62,18 +64,33 @@ def safe_lon_distances(speed_front, speed_rear):
     accRearMaxResp: max acceleration of rear car during response time
     accRearMinBrake: min braking of rear car
     """
-    if speed_rear + responseTime * accRearMaxResp < 0:
-         sign = 1
-    else:
-        sign = -1
+    
+    
+    safe_dlon_min = {}
 
-    safeLonDis = 0.5 * np.power(speed_front, 2) / accFrontMaxBrake - speed_rear * responseTime - 0.5 * \
-                 np.power(responseTime, 2) * accRearMaxResp - 0.5 * sign * np.power(speed_rear + responseTime *
-                                                                                    accRearMaxResp, 2) / accRearMinBrake
-    safeLonDisBrake = 0.5 * np.power(speed_front, 2) / accFrontMaxBrake - speed_rear * responseTime - 0.5 * \
-                      np.power(responseTime, 2) * accRearMaxResp - 0.5 * sign * np.power(speed_rear + responseTime *
-                                                                                  accRearMaxResp, 2) / accRearMaxBrake
-    return safeLonDis, safeLonDisBrake
+    for keys, values in risk_long_inputs.items(): 
+
+        speed_front, speed_rear, d_long_curr = values
+        sq_term = (speed_rear + responseTime*accRearMaxResp)**2
+        d_lon_min = (speed_rear * responseTime) + (0.5 * np.power(responseTime,2) * accRearMaxResp) + (0.5 * sq_term / accRearMinBrake ) \
+                                - (0.5 *  np.power(speed_front,2) / accFrontMaxBrake)
+
+        d_lon_min_brake = (speed_rear * responseTime) + (0.5 * np.power(responseTime,2) * accRearMaxResp) + (0.5 * sq_term / accRearMaxBrake ) \
+                           - (0.5 *  np.power(speed_front,2) / accFrontMaxBrake) 
+        safe_dlon_min[keys] = (d_lon_min, d_lon_min_brake ,d_long_curr)
+
+
+    # safeLonDis = 0.5 * np.power(speed_front, 2) / accFrontMaxBrake - speed_rear * responseTime - 0.5 * \
+    #              np.power(responseTime, 2) * accRearMaxResp - 0.5 * sign * np.power(speed_rear + responseTime *
+    #                                                                                 accRearMaxResp, 2) / accRearMinBrake
+    # safeLonDisBrake = 0.5 * np.power(speed_front, 2) / accFrontMaxBrake - speed_rear * responseTime - 0.5 * \
+    #                   np.power(responseTime, 2) * accRearMaxResp - 0.5 * sign * np.power(speed_rear + responseTime *
+    #                                                                               accRearMaxResp, 2) / accRearMaxBrake
+    
+    print(f'saf_long_dist {safe_dlon_min}')
+    time.sleep(5)
+    
+    return None
 
 
 # Function to calculate safe lateral distance
