@@ -7,7 +7,7 @@ import time
 
 from smarts.core.coordinates import Heading
 from smarts.core.sensors import Observation
-from smarts.core.utils.math import squared_dist, vec_2d, vec_to_radians, position_to_ego_frame
+from smarts.core.utils.math import squared_dist, vec_2d, vec_to_radians, position_to_ego_frame, velocity_to_ego_frame
 
 from risk_indices.risk_indices import safe_lon_distances
 
@@ -33,7 +33,8 @@ def risk_obs(obs: Observation):
 
     ego_pos = obs.ego_vehicle_state.position
     ego_lin_vel = obs.ego_vehicle_state.linear_velocity # dx/dt, dy/dt 
-    ego_heading = obs.ego_vehicle_state.heading.__float__() #heading angle in radians
+    ego_heading = obs.ego_vehicle_state.heading.__float__()
+    #heading angle in radians: Starts at north and moves anti clockwise
 
     cos, sin = np.cos(ego_heading) , np.sin(ego_heading)
 
@@ -69,14 +70,17 @@ def risk_obs(obs: Observation):
 
 
 
-        #TODO: Convert neighbor heading to ego frame 
-        neigh_rel_heading = neigh_heading - ego_heading  
-        neigh_x_dot = neighbor.speed * np.sin(neigh_rel_heading)
-        neigh_y_dot = neighbor.speed * np.cos(neigh_rel_heading)
-        neigh_linear_vel = np.array([neigh_x_dot, neigh_y_dot, 0]) #assume 0 for velocity in z direction 
-        local_frame_vel = np.dot(rotation_matrix_3d, neigh_linear_vel)
 
-        local_frame_vel_dict[neigh_id] = local_frame_vel
+        neigh_global_long_vel = neighbor.speed * np.cos(neigh_heading)
+        neigh_global_lat_vel = neighbor.speed * np.sin(neigh_heading)
+        neigh_vel_vect = np.array([[neigh_global_long_vel],[neigh_global_lat_vel]])
+
+        new_vel_vect = velocity_to_ego_frame(neighbor_velocity_vector=neigh_vel_vect, 
+                                  neighbor_heading=neigh_heading, ego_heading=ego_heading)
+        
+        #TODO: Check sign of longitudinal velocity; vehicles moving in opposite directions should have opposite sign.
+
+        local_frame_vel_dict[neigh_id] = new_vel_vect
     
     # Combine neighbor velocity and distance into one dictionary {veh_id: (dist, vel)...} -> relative to ego  
     local_frame_paras = {} 
@@ -90,13 +94,17 @@ def risk_obs(obs: Observation):
 
     _risk_lat_inputs = left_check(local_frame_paras)
 
-    #TODO:Compute d_long min and d_lat min 
+   
 
     if len(neighbors) > 3: 
         _risk_long_inputs = front_check(local_frame_paras) 
         _risk_lat_inputs = left_check(local_frame_paras)
+        
+        for keys in _risk_long_inputs.keys():
+            print(f'id {keys[:8]} \n vf {_risk_long_inputs[keys][0]}, \n vr {_risk_long_inputs[keys][1]}, \n d_curr {_risk_long_inputs[keys][2]}')
 
-        _ = safe_lon_distances(_risk_long_inputs)
+        # time.sleep(60)
+        # _ = safe_lon_distances(_risk_long_inputs)
 
         # print('check') 
         # print(f'ego frame dist {local_frame_dist_dict}')
@@ -112,29 +120,49 @@ def risk_obs(obs: Observation):
 
 risk_indices_obs_adapter = Adapter(space=_RISK_INDICES_OBS, transform=risk_obs)
 
-def front_check(local_frame): 
+veh_width = 1.8 
+veh_length = 5
+scale = 1.5 #safety factor 
 
+def front_check(local_frame): 
+    """
+    Check if vehicle is in front and within the threshold to be considered for long_risk calc: 
+    Args:
+    local_frame: Dict[str:(dist, neigh_vel, ego_vel)] with distance and vel relative to ego frame
+    Returns: 
+    risk_long_inp: Dict[Tuple[bool ,np.array,np.array,float]] bool=False if threshold not met 
+                    and risk_long_inp[id][1:]=None 
+                    else bool=True and risk_long_inp[id][1:] = v_f, vr, d_long_current 
+    """
     risk_long_inp = {}
 
     for keys, vals in local_frame.items():
 
         local_dist, local_vels, ego_vel  = vals
         d_long_curr = local_dist[1]
+        horiz = local_dist[0]
         if d_long_curr >= 0:  #Neighbor in front .
-            # if meet lateral threshold
-            #TODO: Add threshold 
-            #TODO: Nested if for neighbours that are in front 
-            v_f = np.linalg.norm(local_vels)
-            v_r = np.linalg.norm(ego_vel)
-            risk_long_inp[keys] = (v_f, v_r, d_long_curr)
-            # else:
-            #    long risk =0 
 
-        else: 
+            if abs(horiz) <= scale * veh_width:  # if meet lateral threshold
+                v_f = np.linalg.norm(local_vels)
+                v_r = np.linalg.norm(ego_vel)
+                front = True 
+                risk_long_inp[keys] = ({'front':front}, v_f, v_r, d_long_curr)
+
+            else:
+                front= False
+                risk_long_inp[keys] = ({'front':front}, None, None, None)
+
+        elif d_long_curr < 0 and abs(horiz) <= scale * veh_width: 
             #TODO: Elseif threshold and less than 0 
             v_f = np.linalg.norm(ego_vel)
             v_r = np.linalg.norm(local_vels)
-            risk_long_inp[keys] = (v_f, v_r, d_long_curr)
+            rear = True 
+            risk_long_inp[keys] = ({'rear':rear},v_f, v_r, d_long_curr)
+        
+        else: 
+            rear= False
+            risk_long_inp[keys] = ({'rear':rear}, None, None, None)
 
     return risk_long_inp
 
