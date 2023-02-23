@@ -89,8 +89,10 @@ def reward_adapter(env_obs, env_reward):
 
     if len(env_obs.events.collisions )!= 0:
         print('Negative reward activated')
-        env_reward = -10 + env_obs.ego_vehicle_state.speed
-    
+        env_reward = -10 + env_obs.ego_vehicle_state.speed + env_obs.distance_travelled
+    else: 
+
+        env_reward = env_obs.ego_vehicle_state.speed + env_obs.distance_travelled
 
     return env_reward
 
@@ -106,6 +108,7 @@ a2c = ACPolicy(input_size=agent_obs_size, disc_action_size=4)
 a2c_optimizer = optim.Adam(a2c.parameters(), lr=3e-2)
 eps = np.finfo(np.float32).eps.item()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
 
 n_agents = 1 
 agent_ids = [f'Worker_{i}' for i in range(1,n_agents+1)] 
@@ -230,7 +233,7 @@ if __name__ == "__main__":
      args.scenarios = [
         str(pathlib.Path(__file__).absolute().parents[1] / "scenarios" / "loop")
     ]
-
+    build_scenario(args.scenarios)
     main()
 
 
