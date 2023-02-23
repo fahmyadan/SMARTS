@@ -89,7 +89,8 @@ def reward_adapter(env_obs, env_reward):
 
     if len(env_obs.events.collisions )!= 0:
         print('Negative reward activated')
-        env_reward = -100
+        env_reward = -10 + env_obs.ego_vehicle_state.speed
+    
 
     return env_reward
 
@@ -179,6 +180,7 @@ def main():
             agent_lane_actions = agents['Worker_1'].act(obs=observations, sampled_action= agent_action)
 
             observations, reward, done, info = env.step(agent_lane_actions)
+            # print(f'action : {agent_lane_actions}')
            
             episode.record_step(observations, episode_reward, done, info)
            
