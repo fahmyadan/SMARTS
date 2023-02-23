@@ -76,15 +76,37 @@ ego_missions = [
 
 scenario = Scenario(
     traffic={
-        "basic": Traffic(
+        "S2N": Traffic(
             flows=[
                 Flow(
-                    route=RandomRoute(),
-                    rate=3600,
+                    route=Route(begin=("edge-south-SN", 1, 20), end=("edge-north-SN", 1, "max")),
+                    rate=2000,
                     actors={TrafficActor(name="car"): 1.0},
-                )
-            ]
+                ),
+                Flow(
+                    route=Route(begin=("edge-south-SN", 0, 20), end=("edge-east-WE", 1, "max")),
+                    rate=2000,
+                    actors={TrafficActor(name="car"): 1.0},
+                ),
+
+                Flow(
+                route=Route(begin=("edge-south-SN", 0, 0), end=("edge-west-EW", 1, "max")),
+                rate=2000,
+                actors={TrafficActor(name="car"): 1.0},
+            ),
+                Flow(
+                route=Route(begin=("edge-north-NS", 0, 0), end=("edge-west-EW", 0, "max")),
+                rate=2000,
+                actors={TrafficActor(name="car"): 1.0},
+            ),
+                Flow(
+            route=Route(begin=("edge-north-NS", 1, 0), end=("edge-south-NS", 1, "max")),
+            rate=2000,
+            actors={TrafficActor(name="car"): 1.0},
         )
+        ]
+        ),
+    
     },
     ego_missions=ego_missions,
 )
