@@ -34,7 +34,7 @@ setup(
         "rich>=11.2.0",
         "Rtree>=0.9.7",
         "sh>=1.14.2",
-        "shapely>=1.8.1",
+        "shapely==1.8.1",
         "tableprint>=0.9.1",
         "trimesh==3.9.29",  # Used for writing .glb files
         "visdom>=0.1.8.9",
@@ -54,6 +54,8 @@ setup(
         "protobuf>=3.19.1",
         "PyYAML>=6.0",
         "twisted>=21.7.0",
+        "lark>=1.1.5",
+
     ],
     extras_require={
         "camera-obs": ["Panda3D==1.10.9", "panda3d-gltf==0.13"],
@@ -85,7 +87,7 @@ setup(
             "pytest-benchmark>=3.4.1",
             "pytest-cov>=3.0.0",
             "pytest-notebook>=0.7.0",
-            "pytest-xdist>=2.4.0",
+            "pytest-xdist==2.4.0",
         ],
         "torch": [
             "torch==1.4.0",
