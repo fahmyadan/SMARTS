@@ -9,6 +9,8 @@ from smarts.core.coordinates import Heading
 from smarts.core.sensors import Observation
 from smarts.core.utils.math import squared_dist, vec_2d, vec_to_radians, position_to_ego_frame
 
+from risk_indices.risk_indices import safe_lon_distances
+
 @dataclass
 class Adapter:
     """An adapter for pairing an action/observation transformation method with its gym
@@ -65,8 +67,12 @@ def risk_obs(obs: Observation):
         # Convert scalar speed to linear velocity
         neigh_heading = neighbor.heading.__float__() 
 
-        neigh_x_dot = neighbor.speed * np.sin(neigh_heading)
-        neigh_y_dot = neighbor.speed * np.cos(neigh_heading)
+
+
+        #TODO: Convert neighbor heading to ego frame 
+        neigh_rel_heading = neigh_heading - ego_heading  
+        neigh_x_dot = neighbor.speed * np.sin(neigh_rel_heading)
+        neigh_y_dot = neighbor.speed * np.cos(neigh_rel_heading)
         neigh_linear_vel = np.array([neigh_x_dot, neigh_y_dot, 0]) #assume 0 for velocity in z direction 
         local_frame_vel = np.dot(rotation_matrix_3d, neigh_linear_vel)
 
@@ -86,10 +92,14 @@ def risk_obs(obs: Observation):
 
     #TODO:Compute d_long min and d_lat min 
 
-    # if len(neighbors) > 3: 
-    #     front_check(local_frame_paras) 
-    #     print('check') 
-    #     print(f'ego frame dist {local_frame_dist_dict}')
+    if len(neighbors) > 3: 
+        _risk_long_inputs = front_check(local_frame_paras) 
+        _risk_lat_inputs = left_check(local_frame_paras)
+
+        _ = safe_lon_distances(_risk_long_inputs)
+
+        # print('check') 
+        # print(f'ego frame dist {local_frame_dist_dict}')
         # time.sleep(5)
     
 
@@ -110,11 +120,18 @@ def front_check(local_frame):
 
         local_dist, local_vels, ego_vel  = vals
         d_long_curr = local_dist[1]
-        if d_long_curr >= 0:  #Neighbor in front
+        if d_long_curr >= 0:  #Neighbor in front .
+            # if meet lateral threshold
+            #TODO: Add threshold 
+            #TODO: Nested if for neighbours that are in front 
             v_f = np.linalg.norm(local_vels)
             v_r = np.linalg.norm(ego_vel)
             risk_long_inp[keys] = (v_f, v_r, d_long_curr)
+            # else:
+            #    long risk =0 
+
         else: 
+            #TODO: Elseif threshold and less than 0 
             v_f = np.linalg.norm(ego_vel)
             v_r = np.linalg.norm(local_vels)
             risk_long_inp[keys] = (v_f, v_r, d_long_curr)
