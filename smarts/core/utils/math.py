@@ -476,15 +476,35 @@ def position_to_ego_frame(position, ego_position, ego_heading):
     Egocentric frame: The ego position becomes origin, and ego heading direction is positive x-axis.
     Args:
         position: [x,y,z]
-        ego_position: Ego vehicle [x,y,z]
+        neighbor_heading: in radians 
         ego_heading: Ego vehicle heading in radians
     Returns:
-        new_pose: The pose [x,y,z] in egocentric view
+        new_velocity: The velocity relative to egocentric view
     """
     transform_matrix = _gen_ego_frame_matrix(ego_heading)
     ego_rel_position = np.asarray(position) - np.asarray(ego_position)
     new_position = np.matmul(transform_matrix, ego_rel_position.T).T
     return new_position.tolist()
+
+def velocity_to_ego_frame(neighbor_velocity_vector, neighbor_heading, ego_heading):
+    """
+    Get the velocity of neighbor in ego vehicle frame given the velocity (of either a vehicle or some point) in global frame.
+    Args:
+        velocity: [x_dot,y_dot,z_dot]
+        neighbor_heading: Ego vehicle [x,y,z]
+        ego_heading: Ego vehicle heading in radians
+    Returns:
+        new_pose: The pose [x,y,z] in egocentric view
+    """
+    relative_angle_gamma = neighbor_heading - ego_heading  #Angle between ego and neighbor 
+
+    cos, sin = np.cos(relative_angle_gamma) , np.sin(relative_angle_gamma)
+
+    rotation_matrix_2d = np.array(((cos,-sin), (sin, cos)))
+
+    new_vel_vector = np.dot(rotation_matrix_2d, neighbor_velocity_vector)
+
+    return new_vel_vector
 
 
 def world_position_from_ego_frame(position, ego_world_position, ego_world_heading):
