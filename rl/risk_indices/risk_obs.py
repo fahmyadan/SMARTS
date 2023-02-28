@@ -9,7 +9,7 @@ from smarts.core.coordinates import Heading
 from smarts.core.sensors import Observation
 from smarts.core.utils.math import squared_dist, vec_2d, vec_to_radians, position_to_ego_frame, velocity_to_ego_frame
 
-from risk_indices.risk_indices import safe_lon_distances
+from risk_indices.risk_indices import safe_lon_distances, safe_lat_distances,risk_index
 
 @dataclass
 class Adapter:
@@ -94,23 +94,17 @@ def risk_obs(obs: Observation):
 
     _risk_lat_inputs = left_check(local_frame_paras)
 
-   
+    for keys,vals in _risk_lat_inputs.items():
+        if None not in vals: 
+            print(f'{keys} \n lat_dist {vals[3]} \n left check {vals[0]}')
+            time.sleep(5)
 
-    if len(neighbors) > 3: 
-        _risk_long_inputs = front_check(local_frame_paras) 
-        _risk_lat_inputs = left_check(local_frame_paras)
-        
-        for keys in _risk_long_inputs.keys():
-            print(f'id {keys[:8]} \n vf {_risk_long_inputs[keys][0]}, \n vr {_risk_long_inputs[keys][1]}, \n d_curr {_risk_long_inputs[keys][2]}')
+    safe_long_distances_all = safe_lon_distances(_risk_long_inputs)
+    _ = safe_lat_distances(_risk_lat_inputs)
 
-        # time.sleep(60)
-        # _ = safe_lon_distances(_risk_long_inputs)
+    long_risk = risk_index(safe_long_distances_all)
 
-        # print('check') 
-        # print(f'ego frame dist {local_frame_dist_dict}')
-        # time.sleep(5)
-    
-
+         
 
     risk_obs = {'rel_distance_min': 50, 'rel_vel': 20}
     
@@ -134,6 +128,8 @@ def front_check(local_frame):
                     and risk_long_inp[id][1:]=None 
                     else bool=True and risk_long_inp[id][1:] = v_f, vr, d_long_current 
     """
+
+    #TODO: Check v_f/v_r if it is correct longitudinal velocity or the magnitude of vector
     risk_long_inp = {}
 
     for keys, vals in local_frame.items():
@@ -144,6 +140,7 @@ def front_check(local_frame):
         if d_long_curr >= 0:  #Neighbor in front .
 
             if abs(horiz) <= scale * veh_width:  # if meet lateral threshold
+                
                 v_f = np.linalg.norm(local_vels)
                 v_r = np.linalg.norm(ego_vel)
                 front = True 
@@ -154,7 +151,6 @@ def front_check(local_frame):
                 risk_long_inp[keys] = ({'front':front}, None, None, None)
 
         elif d_long_curr < 0 and abs(horiz) <= scale * veh_width: 
-            #TODO: Elseif threshold and less than 0 
             v_f = np.linalg.norm(ego_vel)
             v_r = np.linalg.norm(local_vels)
             rear = True 
@@ -168,22 +164,35 @@ def front_check(local_frame):
 
 
 def left_check(local_frame):
-
+    #TODO: Check v_lhs/v_rhs if it is correct lateral velocity or the magnitude of vector
     risk_lat_inputs = {} 
 
     for keys, vals in local_frame.items():
         local_dist, local_vels, ego_vel  = vals
 
         d_lat_curr =  local_dist[0] 
+        vertical = local_dist[1]
 
         if d_lat_curr >= 0: #Neighbor on RHS
-            v_lhs = ego_vel[1]
-            v_rhs = local_vels[0]
-            risk_lat_inputs[keys] = (v_lhs, v_rhs, d_lat_curr)
-        else: 
-            v_lhs = local_vels[0]
+
+            if abs(vertical) <= scale * veh_length: # Meets vertical threshold zone
+                v_lhs = ego_vel[1]
+                v_rhs = local_vels[1]
+                right= True #Neighbor is on RHS 
+                risk_lat_inputs[keys] = ({'right':right},v_lhs, v_rhs, d_lat_curr)
+            else: 
+                right = False 
+                risk_lat_inputs[keys] = ({'right':right},None, None, None)
+
+        elif d_lat_curr < 0 and abs(vertical) <= scale * veh_length: 
+            left = True #Neighbor is on LHS 
+            v_lhs = local_vels[1]
             v_rhs = ego_vel[1]
-            risk_lat_inputs[keys] = (v_lhs, v_rhs, d_lat_curr)
+            risk_lat_inputs[keys] = ({'left':left},v_lhs, v_rhs, d_lat_curr)
+        else: 
+            left = False
+            risk_lat_inputs[keys] = ({'left':left},None, None, None)
+
 
     return risk_lat_inputs
 
