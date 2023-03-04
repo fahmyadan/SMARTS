@@ -103,7 +103,7 @@ def safe_lat_distances(risk_lat_inputs):
     accMaxResp: max acceleration of both cars towards each other during response time
     accMinBrake: min braking of both cars
     """
-    
+    safe_dlat ={}
     for keys, vals in risk_lat_inputs.items():
         if None not in vals:
             left_or_right, speed_left, speed_right, d_lat_curr = vals
@@ -112,44 +112,53 @@ def safe_lat_distances(risk_lat_inputs):
             vLeft = speed_left - responseTime * accMaxResp
             vRight = speed_right + responseTime * accMaxResp
             # left vehicle move to left
-    # if vLeft >= 0:
-    #     # right vehicle move to left
-    #     if vRight >= 0:
-    #         acc_left_min_gap = acc_right_max_gap = accMaxBrake
-    #         acc_left_max_gap = acc_right_min_gap = accMinBrake
+            if vLeft <= 0:
 
-    #     # right vehicle move to right
-    #     else:
-    #         acc_left_min_gap = acc_right_min_gap = accMaxBrake
-    #         acc_left_max_gap = acc_right_max_gap = accMinBrake
+                if vRight <= 0: 
+                    """
+                    If left + right vehs are moving to the left, both need to brake as much as possible to avoid collision
+                    """
+                    acc_left_min_gap = acc_right_max_gap = accMaxBrake
+                    acc_left_max_gap = acc_right_min_gap = accMinBrake
+                
+                else: #right vehicle moving to the right 
+                    """
+                    Left veh brakes at maximum brake limit and right veh brakes at minimum limit
+                    """
+                    acc_left_min_gap = acc_right_min_gap = accMaxBrake
+                    acc_left_max_gap = acc_right_max_gap = accMinBrake
+            
+            else: #Left veh moving to the right  
+                
+                if vRight <= 0: #Right veh moving left
+                    acc_left_min_gap = acc_right_min_gap = accMinBrake
+                    acc_left_max_gap = acc_right_max_gap = accMaxBrake
+                
+                else: #Right veh moving right 
+                    acc_left_min_gap = acc_right_max_gap = accMinBrake
+                    acc_left_max_gap = acc_right_min_gap = accMaxBrake
 
-    # # left vehicle move to right
-    # else:
-    #     # right vehicle move to left
-    #     if vRight >= 0:
-    #         acc_left_min_gap = acc_right_min_gap = accMinBrake
-    #         acc_left_max_gap = acc_right_max_gap = accMaxBrake
+            
+            sign_left = [1,-1] [vLeft.item()<=0] #left vehicle moving left sign=-1
+            sign_right = [1,-1][vRight.item()<=0]
 
-    #     # right vehicle move to right
-    #     else:
-    #         acc_left_min_gap = acc_right_max_gap = accMinBrake
-    #         acc_left_max_gap = acc_right_min_gap = accMaxBrake
-    # if vLeft < 0:
-    #     sign_left = -1
-    # else:
-    #     sign_left = 1
+            d_lat_min = 0.5 * (speed_left + vLeft) * responseTime + 0.5 * sign_left * np.power(vLeft, 2) / acc_left_min_gap - (
+            0.5 * (speed_right + vRight) * responseTime + 0.5 * sign_right * np.power(vRight, 2) / acc_right_min_gap)
 
-    # if vRight < 0:
-    #     sign_right = -1
-    # else:
-    #     sign_right = 1
+            d_lat_min_brake = 0.5 * (speed_left + vLeft) * responseTime + 0.5 * sign_left * np.power(vLeft, 2) / \
+                      acc_left_max_gap - (0.5 * (speed_right + vRight) * responseTime + 0.5 * sign_right *
+                                          np.power(vRight, 2) / acc_right_max_gap)
 
-    # safeLatDis = 0.5 * (speed_left + vLeft) * responseTime + 0.5 * sign_left * np.power(vLeft, 2) / acc_left_min_gap - (
-    #         0.5 * (speed_right + vRight) * responseTime + 0.5 * sign_right * np.power(vRight, 2) / acc_right_min_gap)
-    # safeLatDisBrake = 0.5 * (speed_left + vLeft) * responseTime + 0.5 * sign_left * np.power(vLeft, 2) / \
-    #                   acc_left_max_gap - (0.5 * (speed_right + vRight) * responseTime + 0.5 * sign_right *
-    #                                       np.power(vRight, 2) / acc_right_max_gap)
-    return None #safeLatDis, safeLatDisBrake
+            safe_dlat[keys] = (d_lat_min, d_lat_min_brake, d_lat_curr)
+
+        else: 
+            d_lat_min = None
+            d_lat_min_brake = None 
+            d_lat_curr = None 
+
+            safe_dlat[keys] = (d_lat_min, d_lat_min_brake, d_lat_curr)
+    
+    return safe_dlat
 
 
 # Function to calculate the longitudinal or lateral risk index [0,1]
@@ -160,31 +169,44 @@ def risk_index(safe_distances_all):
     braking capacity (use function SafeLonDistance with max braking acceleration) distance: current
     longitudinal distance between cars
     """
-    r = {} 
+    r_long = {}
+    r_lat = {}
+    
+    long_distance, lat_distance = safe_distances_all
+    long_lat_distances = {k: [long_distance[k], lat_distance[k]] for k in long_distance.keys()}
+    
+    # long_lat = {key: [(safe_long_distance, safe_lat_distance)]}. safe_long/lat: (dmin,dminbrake, dcurrent)
+   
+    for keys, vals in long_lat_distances.items(): 
+        if None in vals[0]: #long risk = 0
+            r_long[keys] = 0
+        elif None not in vals[0]: 
+            safe__long_distance, safe_long_distance_brake , long_distance = vals[0]
 
-    for keys, vals in safe_distances_all.items(): 
-        if None in vals:
-            r[keys] = 0
-        else: 
-            safe_distance, safe_distance_brake , distance = vals
+            if abs(long_distance) >= safe__long_distance and abs(long_distance) > 0:
+                r_long[keys] = 0
 
-            if abs(distance) >= safe_distance and abs(distance) > 0:
-                r[keys] = 0
+            elif safe__long_distance >= abs(long_distance) and abs(long_distance) >= safe_long_distance_brake:
 
-            elif safe_distance >= abs(distance) and abs(distance) >= safe_distance_brake:
-
-                r[keys] = 1- ((abs(distance)- safe_distance_brake)/ (safe_distance - safe_distance_brake))
+                r_long[keys] = 1- ((abs(long_distance)- safe_long_distance_brake)/ (safe__long_distance - safe_long_distance_brake))
             else: 
-                r[keys] = 1
+                r_long[keys] = 1
+        if None in vals[1]:
+            r_lat[keys] = 0
+        elif None not in vals[1]: 
+            safe_lat_distance, safe_lat_distance_brake, lat_distance = vals[1]
+            if abs(lat_distance) >= safe_lat_distance and abs(lat_distance) > 0:
+                r_lat[keys] = 0
 
+            elif safe_lat_distance >= abs(lat_distance) and abs(lat_distance) >= safe_lat_distance_brake:
 
-            
-            # if safe_distance + distance > 0:
-            #     r[keys] = 0
-            # elif safe_distance_brake + distance <= 0:
-            #     r[keys] = 1
-            # else:
-            #     r[keys] = 1 - (safe_distance_brake + distance) / (safe_distance_brake - safe_distance)
+                r_lat[keys] = 1- ((abs(lat_distance)- safe_lat_distance_brake)/ (safe_lat_distance - safe_lat_distance_brake))
+            else: 
+                r_lat[keys] = 1
+        
+
+    r = {car: (r_long[car], r_lat[car]) for car in r_long.keys()}
+
     return r
 
 
