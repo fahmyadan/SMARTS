@@ -97,15 +97,20 @@ def risk_obs(obs: Observation):
     for keys,vals in _risk_lat_inputs.items():
         if None not in vals: 
             print(f'{keys} \n lat_dist {vals[3]} \n left check {vals[0]}')
-            time.sleep(5)
+            safe_lat_distances_all = safe_lat_distances(_risk_lat_inputs)
+            print('check: safe_lat')
+            
 
     safe_long_distances_all = safe_lon_distances(_risk_long_inputs)
-    _ = safe_lat_distances(_risk_lat_inputs)
 
-    long_risk = risk_index(safe_long_distances_all)
+    safe_lat_distances_all = safe_lat_distances(_risk_lat_inputs)
+    
+    safe_distances_all = (safe_long_distances_all, safe_lat_distances_all)
+
+
+    long_lat_risk = risk_index(safe_distances_all)
 
          
-
     risk_obs = {'rel_distance_min': 50, 'rel_vel': 20}
     
 
