@@ -123,7 +123,7 @@ SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 def main():
     scenario_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scenarios/intersections/4lane')
     args.scenarios = [scenario_dir]
-    args.headless = False 
+    args.headless = True 
     args.num_step = 1000
     args.num_episodes = 500
 
@@ -138,7 +138,7 @@ def main():
     scenarios=args.scenarios,
     agent_specs=agent_specs,
     headless=args.headless,
-    sumo_headless=True,
+    sumo_headless=False,
     sumo_port= 45761)
 
     # Wrapper from MultiAgent to Single Agent env 
