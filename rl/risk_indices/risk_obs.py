@@ -9,7 +9,7 @@ from smarts.core.coordinates import Heading
 from smarts.core.sensors import Observation
 from smarts.core.utils.math import squared_dist, vec_2d, vec_to_radians, position_to_ego_frame, velocity_to_ego_frame
 
-from risk_indices.risk_indices import safe_lon_distances, safe_lat_distances,risk_index
+from risk_indices.risk_indices import safe_lon_distances, safe_lat_distances,risk_index, risk_index_unified, alt_risk_index_unified
 
 @dataclass
 class Adapter:
@@ -94,13 +94,6 @@ def risk_obs(obs: Observation):
 
     _risk_lat_inputs = left_check(local_frame_paras)
 
-    for keys,vals in _risk_lat_inputs.items():
-        if None not in vals: 
-            print(f'{keys} \n lat_dist {vals[3]} \n left check {vals[0]}')
-            safe_lat_distances_all = safe_lat_distances(_risk_lat_inputs)
-            print('check: safe_lat')
-            
-
     safe_long_distances_all = safe_lon_distances(_risk_long_inputs)
 
     safe_lat_distances_all = safe_lat_distances(_risk_lat_inputs)
@@ -108,13 +101,13 @@ def risk_obs(obs: Observation):
     safe_distances_all = (safe_long_distances_all, safe_lat_distances_all)
 
 
-    long_lat_risk = risk_index(safe_distances_all)
+    long_lat_risk = risk_index(safe_distances_all) # (Long risk, Lat risk) 
 
-         
-    risk_obs = {'rel_distance_min': 50, 'rel_vel': 20}
+    unif_risks = risk_index_unified(long_lat_risk)
+    alt_unif_risk = alt_risk_index_unified(long_lat_risk)
     
 
-    return risk_obs
+    return unif_risks
 
 
 risk_indices_obs_adapter = Adapter(space=_RISK_INDICES_OBS, transform=risk_obs)
