@@ -25,6 +25,8 @@ def finish_episode(model,args, optimizer, device):
         R = r + args.a2c_gamma * R
         returns.insert(0, R)
 
+    # returns = np.array(returns).astype(np.float32)
+    returns = np.array(returns, dtype=object).astype(np.float32)
     returns = torch.tensor(returns).to(device=device, dtype=torch.float32)
     returns = (returns - returns.mean()) / (returns.std() + eps)
 
@@ -35,7 +37,7 @@ def finish_episode(model,args, optimizer, device):
         policy_losses.append(-log_prob * advantage)
 
         # calculate critic (value) loss using L1 smooth loss
-        value_losses.append(F.smooth_l1_loss(value, torch.tensor([R]).to(device=device)))
+        value_losses.append(F.smooth_l1_loss(value, torch.tensor([R]).reshape([1,1]).to(device=device)))
 
     # reset gradients
     optimizer.zero_grad()
