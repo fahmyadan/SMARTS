@@ -230,15 +230,14 @@ def main():
         
         running_loss+= total_ac_loss.item()
         
-        # Log the loss every 20 episodes
-        print(f'ep ind {episode.index} \n interval {args.log_interval}')
+        # Log the loss every 5 episodes
 
         if episode.index   %  args.log_interval == 0: 
-            print('writing to disk')
+            print(f'Last reward {episode_reward} \n average reward {running_reward} \n running avg AC_Loss {running_loss/5}')
             writer.add_scalar('training_loss', running_loss/5, episode.index+5)
             running_loss = 0
             writer.flush()
-            print(f'Last reward {episode_reward} \n average reward {running_reward} \n AC_Loss {total_ac_loss}')
+           
 
 
  
