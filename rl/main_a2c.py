@@ -1,16 +1,23 @@
 import argparse
 import gym
+from matplotlib.pyplot import step
 import numpy as np
 from itertools import count
 from collections import namedtuple
 import pathlib 
 import os
+import datetime
+import shutil
+import atexit
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
+from torch.utils.tensorboard.writer import SummaryWriter
+
+
 
 # Import A2C model, sampling and train logic
 
@@ -40,7 +47,7 @@ parser.add_argument("scenarios",help="A list of scenarios. ",type=str,nargs="*",
 parser.add_argument("--headless", help="Run the simulation in headless mode.", action="store_true")
 parser.add_argument('--env_name', type=str, default="smarts.env:hiway-v0", help='The name of the gym environment')
 parser.add_argument('--a2c_gamma', default=0.99, help='DIscount factor')
-parser.add_argument('--log_interval', default=20, help='')
+parser.add_argument('--log_interval', default=5, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_step', default=100, help='Number of steps to take in SMARTS env')
 parser.add_argument('--lr', default=7e-3, help='')
@@ -86,13 +93,20 @@ def observation_adapter(env_obs):
     return env_obs, ttc_obs, risk_dict
 
 def reward_adapter(env_obs, env_reward):
+    risk_dict = risk_obs(env_obs)
+
+    total_ego_risk = sum(risk_dict.values())
+
+    mag_jerk = np.linalg.norm(env_obs.ego_vehicle_state.linear_jerk)
 
     if len(env_obs.events.collisions )!= 0:
-        print('Negative reward activated')
-        env_reward = -10 + env_obs.ego_vehicle_state.speed + env_obs.distance_travelled
+        print('collision reward activated')
+        env_reward = -1 
+        
+    
     else: 
 
-        env_reward = env_obs.ego_vehicle_state.speed + env_obs.distance_travelled
+        env_reward = (0.5 * env_obs.ego_vehicle_state.speed) + (0.5* env_obs.distance_travelled) - (0.1* total_ego_risk) - (0.1 * mag_jerk)
 
     return env_reward
 
@@ -116,6 +130,9 @@ agent_ids = [f'Worker_{i}' for i in range(1,n_agents+1)]
 # Instantiate the memory object / replay buffer
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
+#Specify log directory 
+log_dir = f'./runs/latest/'
+
 ###################################################################################################################################
 ################################################################ Main Logic ##################################################### 
 ###################################################################################################################################
@@ -126,9 +143,11 @@ def main():
     args.headless = True 
     args.num_step = 1000
     args.num_episodes = 500
+    args.log_interval = 5
 
     # a2c_agent_interface = AgentInterface(action=ActionSpaceType.Lane, max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
-    a2c_agent_interface = AgentInterface.from_type(requested_type=AgentType.Laner, neighborhood_vehicles=NeighborhoodVehicles(radius=100))
+    a2c_agent_interface = AgentInterface.from_type(requested_type=AgentType.Laner, neighborhood_vehicles=NeighborhoodVehicles(radius=100), 
+                                                   accelerometer=True, max_episode_steps = args.num_step)
     a2c_agent_spec = AgentSpec(interface=a2c_agent_interface, agent_builder=LaneAgent, reward_adapter=reward_adapter, observation_adapter=observation_adapter)
 
     agent_specs = {agent_id: a2c_agent_spec for agent_id in agent_ids}
@@ -153,6 +172,10 @@ def main():
     # TODO: Running reward initial value is arbitrary; experiment with better initial value 
 
     running_reward = 10 
+    running_loss = 0 
+ 
+    
+    writer = SummaryWriter(log_dir=log_dir)
 
     for episode in episodes(n=args.num_episodes):
 
@@ -174,7 +197,7 @@ def main():
 
         episode.record_scenario(env.scenario_log)
         done = False
-        steps = 1 
+        steps = 0
 
         while not done: 
 
@@ -205,13 +228,20 @@ def main():
 
         total_ac_loss = finish_episode(model=a2c, args=args, optimizer=a2c_optimizer, device=device)
         
+        running_loss+= total_ac_loss.item()
+        
         # Log the loss every 20 episodes
+        print(f'ep ind {episode.index} \n interval {args.log_interval}')
 
-        if steps % args.log_interval == 0: 
+        if episode.index   %  args.log_interval == 0: 
+            print('writing to disk')
+            writer.add_scalar('training_loss', running_loss/5, episode.index+5)
+            running_loss = 0
+            writer.flush()
             print(f'Last reward {episode_reward} \n average reward {running_reward} \n AC_Loss {total_ac_loss}')
 
 
-
+ 
 
 
 
@@ -220,7 +250,11 @@ def main():
 
     return None
 
-
+#Function called when program exists
+@atexit.register
+def cleanup():
+    shutil.rmtree(log_dir)
+    
 
 
 
