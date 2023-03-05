@@ -1,3 +1,27 @@
+# Risk Aware A2C Policy
+
+This branch contains a single agent implementation of an Advantage Actor Critic Policy that observes it's own state plus that of neighbouring vehicles. The observed states are used as input to calculate a unified risk index that is a combination of the longitudinal and lateral risk of the ego relative to it's neighbours. 
+
+All of the observations are determined using internal SMARTS objects, making it easy to reconfigure and change according to your needs. Read the [documentation](https://smarts.readthedocs.io/en/latest/) to find out more. 
+
+The A2C model and training logic is in [A2C](./rl/rl_algorithms/A2C/) folder in [rl_algorithms](./rl/rl_algorithms/). The risk indices are calculated using a combination of files [here](./rl/risk_indices/). To run everything, the main script is [main_a2c.py](./rl/main_a2c.py) which can be ran as shown below: 
+
+```bash 
+python3 rl/main_a2c.py 
+```
+
+# Quick Setup 
+The package dependencies are somewhat outdated with issues with conflicting versions. I made some changes to make this faster. Also, I had issues using python3.10 so I suggest sticking to 3.7 or 3.8
+```bash 
+bash utils/setup/install_deps.sh #Runs a bash script that installs all appropriate linux dependencies 
+python3.7 -m venv .venv
+pip install -e '.[camera-obs,test,train]'
+make sanity-test 
+```
+
+If some of the tests fail, it will likely be due to issues with your $PATH. Fix as needed. 
+
+
 # SMARTS
 [![SMARTS CI Base Tests Linux](https://github.com/huawei-noah/SMARTS/actions/workflows/ci-base-tests-linux.yml/badge.svg?branch=master)](https://github.com/huawei-noah/SMARTS/actions/workflows/ci-base-tests-linux.yml?query=branch%3Amaster) 
 [![SMARTS CI Format](https://github.com/huawei-noah/SMARTS/actions/workflows/ci-format.yml/badge.svg?branch=master)](https://github.com/huawei-noah/SMARTS/actions/workflows/ci-format.yml?query=branch%3Amaster)
