@@ -10,6 +10,11 @@ The A2C model and training logic is in [A2C](./rl/rl_algorithms/A2C/) folder in 
 python3 rl/main_a2c.py 
 ```
 
+You can see how the training loss performs over time using `tensorboard`. Be aware that the folder containing the log files (runs/latest) will delete automatically after exiting the program, it is just for testing purposes so you don't have to manually delete it every time. To monitor progress using tensorboard, first run the main script, then in a different terminal, run: 
+```bash
+tensorboard --logdir runs/latest/
+```
+
 # Quick Setup 
 The package dependencies are somewhat outdated with issues with conflicting versions. I made some changes to make this faster. Also, I had issues using python3.10 so I suggest sticking to 3.7 or 3.8
 ```bash 
