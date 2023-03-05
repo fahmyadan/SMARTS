@@ -211,15 +211,51 @@ def risk_index(safe_distances_all):
 
 
 # Function to calculate the unified risk index [0,1]
-def risk_index_unified(risk_lon, risk_lat):
+def risk_index_unified(risk_all):
     """
     riskLon: longitudinal risk index (use function RiskIndex with longitudinal inputs)
     riskPropLon: longitudinal risk propensity exponent > 0
     riskLat: lateral risk index (use function RiskIndex with lateral inputs)
     riskPropLat: lateral risk propensity exponent > 0
+    TODO: Invesitgate why both long + lat risk > 0 to have a unified risk >0
     """
-    r = np.power(risk_lon, riskPropLon) * np.power(risk_lat, riskPropLat)
-    return r
+    risk_u = {}
+    for keys in risk_all.keys():
+        risk_lon, risk_lat = risk_all[keys]
+
+        risk_u[keys] =  np.power(risk_lon, riskPropLon) * np.power(risk_lat, riskPropLat)
+
+    return risk_u
+
+def alt_risk_index_unified(risk_all):
+    """
+    riskLon: longitudinal risk index (use function RiskIndex with longitudinal inputs)
+    riskPropLon: longitudinal risk propensity exponent > 0
+    riskLat: lateral risk index (use function RiskIndex with lateral inputs)
+    riskPropLat: lateral risk propensity exponent > 0
+    TODO: Invesitgate why both long + lat risk > 0 to have a unified risk >0
+    """
+    risk_u = {}
+    for keys in risk_all.keys():
+        risk_lon, risk_lat = risk_all[keys]
+
+        if risk_lon >0 and risk_lat >0:
+
+            risk_u[keys] =  np.power(risk_lon, riskPropLon) * np.power(risk_lat, riskPropLat)
+        
+        elif risk_lon > 0 and risk_lat == 0: 
+
+            risk_u[keys] =  np.power(risk_lon, riskPropLon)
+
+        elif risk_lat > 0 and risk_lon ==0: 
+
+             risk_u[keys] = np.power(risk_lat, riskPropLat)
+           
+        else: #both long + lat == 0 
+            risk_u[keys] =  np.power(risk_lon, riskPropLon) * np.power(risk_lat, riskPropLat)
+          
+
+    return risk_u
 
 
 def ttc_compute(distance, sd):
