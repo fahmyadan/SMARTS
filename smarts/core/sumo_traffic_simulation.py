@@ -623,17 +623,21 @@ class SumoTrafficSimulation(Provider):
                 [
                     tc.VAR_POSITION,  # Decimal=66,  Hex=0x42
                     tc.VAR_ANGLE,  # Decimal=67,  Hex=0x43
-                    tc.VAR_SPEED,  # Decimal=64,  Hex=0x40
+                    tc.VAR_SPEED, # Decimal=64,  Hex=0x40
+                    tc.VAR_SPEED_LAT,  #Decimal 50
                     tc.VAR_VEHICLECLASS,  # Decimal=73,  Hex=0x49
                     tc.VAR_ROUTE_INDEX,  # Decimal=105, Hex=0x69
                     tc.VAR_EDGES,  # Decimal=84,  Hex=0x54
                     tc.VAR_TYPE,  # Decimal=79,  Hex=0x4F
                     tc.VAR_LENGTH,  # Decimal=68,  Hex=0x44
                     tc.VAR_WIDTH,  # Decimal=77,  Hex=0x4d
+                    
                 ],
             )
 
+
         sumo_vehicle_state = self._traci_conn.vehicle.getAllSubscriptionResults()
+
 
         for vehicle_id in newly_departed_sumo_traffic:
             other_vehicle_shape = self._shape_of_vehicle(sumo_vehicle_state, vehicle_id)
@@ -685,6 +689,7 @@ class SumoTrafficSimulation(Provider):
             front_bumper_pos = front_bumper_positions[i]
             heading = Heading.from_sumo(sumo_vehicle[tc.VAR_ANGLE])
             speed = sumo_vehicle[tc.VAR_SPEED]
+            lat_speed = sumo_vehicle[tc.VAR_SPEED_LAT]
             vehicle_config_type = sumo_vehicle[tc.VAR_VEHICLECLASS]
             dimensions = VEHICLE_CONFIGS[vehicle_config_type].dimensions
             provider_vehicles.append(
@@ -699,6 +704,7 @@ class SumoTrafficSimulation(Provider):
                     dimensions=dimensions,
                     speed=speed,
                     source="SUMO",
+                    lat_speed = lat_speed,
                 )
             )
 
