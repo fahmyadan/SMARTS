@@ -61,6 +61,7 @@ class VehicleState:
     vehicle_config_type: Optional[str] = None  # key into VEHICLE_CONFIGS
     updated: bool = False
     speed: float = 0.0
+    lat_speed: float = 0.001
     steering: Optional[float] = None
     yaw_rate: Optional[float] = None
     source: Optional[str] = None  # the source of truth for this vehicle state
