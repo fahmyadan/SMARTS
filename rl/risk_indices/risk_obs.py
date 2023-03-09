@@ -50,37 +50,39 @@ def risk_obs(obs: Observation):
         print(f'ego lin vel {ego_lin_vel}')
         time.sleep(5)
 
-    for neighbor in neighbors: 
+    if neighbors:
 
-        neigh_pos.append(neighbor.position) #neighbor position 
-        neigh_speed.append(neighbor.speed)
+        for neighbor in neighbors: 
 
-        neigh_id = neighbor.id
+            neigh_pos.append(neighbor.position) #neighbor position 
+            neigh_speed.append(neighbor.speed)
 
-        ego_distance = neighbor.position - ego_pos
+            neigh_id = neighbor.id
 
-        local_frame_distance = np.dot(rotation_matrix_3d,ego_distance.reshape(3,1))
-        smarts_ego_frame_pos = position_to_ego_frame(position=neighbor.position, ego_position=ego_pos, ego_heading=ego_heading)
-        # Note: smarts_ego_frame_pos[1]> 0 is in front, x> 0 is to the right 
+            ego_distance = neighbor.position - ego_pos
 
-        local_frame_dist_dict[neigh_id] = smarts_ego_frame_pos
+            local_frame_distance = np.dot(rotation_matrix_3d,ego_distance.reshape(3,1))
+            smarts_ego_frame_pos = position_to_ego_frame(position=neighbor.position, ego_position=ego_pos, ego_heading=ego_heading)
+            # Note: smarts_ego_frame_pos[1]> 0 is in front, x> 0 is to the right 
 
-        # Convert scalar speed to linear velocity
-        neigh_heading = neighbor.heading.__float__() 
+            local_frame_dist_dict[neigh_id] = smarts_ego_frame_pos
+
+            # Convert scalar speed to linear velocity
+            neigh_heading = neighbor.heading.__float__() 
 
 
 
 
-        neigh_global_long_vel = neighbor.speed * np.cos(neigh_heading)
-        neigh_global_lat_vel = neighbor.speed * np.sin(neigh_heading)
-        neigh_vel_vect = np.array([[neigh_global_long_vel],[neigh_global_lat_vel]])
+            neigh_global_long_vel = neighbor.speed * np.cos(neigh_heading)
+            neigh_global_lat_vel = neighbor.speed * np.sin(neigh_heading)
+            neigh_vel_vect = np.array([[neigh_global_long_vel],[neigh_global_lat_vel]])
 
-        new_vel_vect = velocity_to_ego_frame(neighbor_velocity_vector=neigh_vel_vect, 
-                                  neighbor_heading=neigh_heading, ego_heading=ego_heading)
-        
-        #TODO: Check sign of longitudinal velocity; vehicles moving in opposite directions should have opposite sign.
+            new_vel_vect = velocity_to_ego_frame(neighbor_velocity_vector=neigh_vel_vect, 
+                                    neighbor_heading=neigh_heading, ego_heading=ego_heading)
+            
+            #TODO: Check sign of longitudinal velocity; vehicles moving in opposite directions should have opposite sign.
 
-        local_frame_vel_dict[neigh_id] = new_vel_vect
+            local_frame_vel_dict[neigh_id] = new_vel_vect
     
     # Combine neighbor velocity and distance into one dictionary {veh_id: (dist, vel)...} -> relative to ego  
     local_frame_paras = {} 
@@ -196,11 +198,6 @@ def left_check(local_frame):
 
 
 
-
-        
-
-
-            
             
         
     
