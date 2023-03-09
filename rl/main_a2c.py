@@ -114,15 +114,22 @@ def reward_adapter(env_obs, env_reward):
 Instantiate A2C model and optimiser 
 
 Agent obs space = [TTC(3,), DTC(3,), Position(3,), Linear_velocity(3,), Angular_vel(3,)]
+
 """
 
-agent_obs_size = 15 
-
-a2c = ACPolicy(input_size=agent_obs_size, disc_action_size=4)
-a2c_optimizer = optim.Adam(a2c.parameters(), lr=3e-2)
-eps = np.finfo(np.float32).eps.item()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
+
+agent_obs_size = 15 
+lstm_hidden_size = 64
+num_lstm_layers = 1 
+
+
+
+
+a2c = ACPolicy(input_size=agent_obs_size, disc_action_size=4, lstm_hidden_size=lstm_hidden_size)
+a2c_optimizer = optim.Adam(a2c.parameters(), lr=3e-2)
+eps = np.finfo(np.float32).eps.item()
 
 n_agents = 1 
 agent_ids = [f'Worker_{i}' for i in range(1,n_agents+1)] 
@@ -157,7 +164,7 @@ def main():
     scenarios=args.scenarios,
     agent_specs=agent_specs,
     headless=args.headless,
-    sumo_headless=False,
+    sumo_headless=True,
     sumo_port= 45761)
 
     # Wrapper from MultiAgent to Single Agent env 
@@ -193,15 +200,18 @@ def main():
 
         
         # TODO: Set up Traci connection for manager obs
+        """Inisitalize the hidden state of the lstm as zeros"""
+        hx_lstm = torch.zeros(num_lstm_layers,lstm_hidden_size).to(device)
+        cx_lstm = torch.zeros(num_lstm_layers,lstm_hidden_size).to(device)
 
-
+        hidden_lstm = (hx_lstm,cx_lstm)
         episode.record_scenario(env.scenario_log)
         done = False
         steps = 0
 
         while not done: 
 
-            agent_action = select_action(state=agent_obs_array, model=a2c, SavedAction=SavedAction, device=device)
+            agent_action, h_lstm  = select_action(state=agent_obs_array, model=a2c, SavedAction=SavedAction, device=device, h_lstm=hidden_lstm) #Includes the forward pass
 
             agent_lane_actions = agents['Worker_1'].act(obs=observations, sampled_action= agent_action)
 
@@ -219,6 +229,10 @@ def main():
                                         observations[0].ego_vehicle_state.angular_velocity]).reshape(1,agent_obs_size)
             steps+=1
 
+            # Reassign hidden lstm states 
+            # hidden_lstm = h_lstm 
+
+            hidden_lstm = h_lstm
             if done: 
                 print(f'episode done after {steps} steps')
 
