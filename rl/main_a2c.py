@@ -91,9 +91,15 @@ def observation_adapter(env_obs):
 
     risk_dict = risk_obs(env_obs)
     return env_obs, ttc_obs, risk_dict
-
+"""
+Reward Adapter: This function returns a scalar reward for the environment. 
+                The elements of the reward vary in magnitude and units. They must be normalised to a value between 0,1
+                max speed: 20m/s -> assumption according to vehicle model 
+                max distance travelled: max distance in one time step given ackermann chassis vehicle kinematics (dt=0.1 max_speed =20, acc = 5)
+                jerk : TBD
+"""
 def reward_adapter(env_obs, env_reward):
-    max_speed: float = 15.0  
+    max_speed: float = 20.0 
     max_distance: float = 5
     max_acc: float = 5
     max_jerk: float = max_acc / 0.1
