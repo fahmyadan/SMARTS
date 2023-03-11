@@ -93,6 +93,10 @@ def observation_adapter(env_obs):
     return env_obs, ttc_obs, risk_dict
 
 def reward_adapter(env_obs, env_reward):
+    max_speed: float = 15.0  
+    max_distance: float = 5
+    max_acc: float = 5
+    max_jerk: float = max_acc / 0.1
     risk_dict = risk_obs(env_obs)
 
     total_ego_risk = sum(risk_dict.values())
@@ -102,11 +106,20 @@ def reward_adapter(env_obs, env_reward):
     if len(env_obs.events.collisions )!= 0:
         print('collision reward activated')
         env_reward = -1 
-        
     
+    elif env_obs.ego_vehicle_state.speed < 2:
+        # To discourage the vehicle from stopping 
+ 
+        env_reward = -0.1
+        
     else: 
 
-        env_reward = (0.5 * env_obs.ego_vehicle_state.speed) + (0.5* env_obs.distance_travelled) - (0.1* total_ego_risk) - (0.1 * mag_jerk)
+        norm_speed = env_obs.ego_vehicle_state.speed / max_speed
+        norm_distance = env_obs.distance_travelled / max_distance
+        norm_jerk = mag_jerk / max_jerk
+
+
+        env_reward = (0.5 * norm_speed) + (0.5* norm_distance) - (0.2* total_ego_risk) - (0.1 * norm_jerk)
 
     return env_reward
 
@@ -157,7 +170,7 @@ def main():
     scenarios=args.scenarios,
     agent_specs=agent_specs,
     headless=args.headless,
-    sumo_headless=False,
+    sumo_headless=True,
     sumo_port= 45761)
 
     # Wrapper from MultiAgent to Single Agent env 
@@ -171,7 +184,7 @@ def main():
 
     # TODO: Running reward initial value is arbitrary; experiment with better initial value 
 
-    running_reward = 10 
+    running_reward = 0
     running_loss = 0 
  
     
@@ -234,8 +247,10 @@ def main():
 
         if episode.index   %  args.log_interval == 0: 
             print(f'Last reward {episode_reward} \n average reward {running_reward} \n running avg AC_Loss {running_loss/5}')
-            writer.add_scalar('training_loss', running_loss/5, episode.index+5)
+            writer.add_scalar('training_loss', running_loss/5, episode.index)
+            writer.add_scalar('running reward', running_reward, episode.index)
             running_loss = 0
+            running_reward = 0 
             writer.flush()
            
 
