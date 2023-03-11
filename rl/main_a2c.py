@@ -9,6 +9,7 @@ import os
 import datetime
 import shutil
 import atexit
+import time
 
 import torch
 import torch.nn as nn
@@ -92,7 +93,18 @@ def observation_adapter(env_obs):
     risk_dict = risk_obs(env_obs)
     return env_obs, ttc_obs, risk_dict
 
+"""
+Reward Adapter: This function returns a scalar reward for the environment. 
+                The elements of the reward vary in magnitude and units. They must be normalised to a value between 0,1
+                max speed: 20m/s -> assumption according to vehicle model 
+                max distance travelled: max distance in one time step given ackermann chassis vehicle kinematics (dt=0.1 max_speed =20, acc = 5)
+                jerk : TBD
+"""
 def reward_adapter(env_obs, env_reward):
+    max_speed: float = 15.0  
+    max_distance: float = 5
+    max_acc: float = 5
+    max_jerk: float = max_acc / 0.1
     risk_dict = risk_obs(env_obs)
 
     total_ego_risk = sum(risk_dict.values())
@@ -102,11 +114,18 @@ def reward_adapter(env_obs, env_reward):
     if len(env_obs.events.collisions )!= 0:
         print('collision reward activated')
         env_reward = -1 
-        
     
+    elif env_obs.ego_vehicle_state.speed < 2:
+        # To discourage the vehicle from stopping 
+        env_reward = -0.1
+        
     else: 
+        norm_speed = env_obs.ego_vehicle_state.speed / max_speed
+        norm_distance = env_obs.distance_travelled / max_distance
+        norm_jerk = mag_jerk / max_jerk
 
-        env_reward = (0.5 * env_obs.ego_vehicle_state.speed) + (0.5* env_obs.distance_travelled) - (0.1* total_ego_risk) - (0.1 * mag_jerk)
+
+        env_reward = (0.5 * norm_speed) + (0.5* norm_distance) - (0.2* total_ego_risk) - (0.1 * norm_jerk)
 
     return env_reward
 
@@ -164,7 +183,7 @@ def main():
     scenarios=args.scenarios,
     agent_specs=agent_specs,
     headless=args.headless,
-    sumo_headless=True,
+    sumo_headless=False,
     sumo_port= 45761)
 
     # Wrapper from MultiAgent to Single Agent env 
