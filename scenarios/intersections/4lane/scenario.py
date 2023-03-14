@@ -13,6 +13,7 @@ from smarts.sstudio.types import (
     Traffic,
     TrafficActor,
     Via,
+    SocialAgentActor,
 )
 
 ego_missions = [
@@ -74,6 +75,22 @@ ego_missions = [
     ),
 ]
 
+zoo_a2c_agent_actor = SocialAgentActor(
+    name="zoo-a2c-agent-actor",
+    agent_locator="a2c_agent:a2c-agent-v0",
+)
+
+social_agent_missions = {
+    "a2c-key": ( [ zoo_a2c_agent_actor,
+        ],
+        [
+            Mission(
+                Route(begin=("edge-south-SN", 1, 30), end=("edge-west-EW", 1, "max"))
+            )
+        ],
+    ),
+}
+
 scenario = Scenario(
     traffic={
         "S2N": Traffic(
@@ -109,6 +126,7 @@ scenario = Scenario(
     
     },
     ego_missions=ego_missions,
+    social_agent_missions= social_agent_missions
 )
 
 gen_scenario(
