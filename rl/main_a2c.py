@@ -138,7 +138,7 @@ Agent obs space = [TTC(3,), DTC(3,), Position(3,), Linear_velocity(3,), Angular_
 agent_obs_size = 15 
 
 a2c = ACPolicy(input_size=agent_obs_size, disc_action_size=4)
-a2c_optimizer = optim.Adam(a2c.parameters(), lr=3e-2)
+a2c_optimizer = optim.Adam(a2c.parameters(), lr=3e-4)
 eps = np.finfo(np.float32).eps.item()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
@@ -151,6 +151,8 @@ SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
 #Specify log directory 
 log_dir = f'./runs/latest/'
+model_dir = f'./model_paras/checkpoint'
+model_path = os.path.join(model_dir, "model"+".pth")
 
 ###################################################################################################################################
 ################################################################ Main Logic ##################################################### 
@@ -160,8 +162,8 @@ def main():
     scenario_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scenarios/intersections/4lane')
     args.scenarios = [scenario_dir]
     args.headless = True 
-    args.num_step = 1000
-    args.num_episodes = 500
+    args.num_step = 50
+    args.num_episodes = 10
     args.log_interval = 5
 
     # a2c_agent_interface = AgentInterface(action=ActionSpaceType.Lane, max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
@@ -260,19 +262,12 @@ def main():
             writer.flush()
            
 
-
- 
-
-
-
-       
-
-
-    return None
+    return a2c 
 
 #Function called when program exists
 @atexit.register
 def cleanup():
+
     shutil.rmtree(log_dir)
     
 
@@ -288,7 +283,9 @@ if __name__ == "__main__":
         str(pathlib.Path(__file__).absolute().parents[1] / "scenarios" / "loop")
     ]
     build_scenario(args.scenarios)
-    main()
+    trained_model = main()
+
+    torch.save(trained_model.state_dict(), model_path)
 
 
 
