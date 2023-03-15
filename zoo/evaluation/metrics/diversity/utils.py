@@ -234,6 +234,7 @@ def count_intersection_area(pos_arr1, pos_arr2):
 
 def count_intersection_segment(pos_list1, pos_list2):
     # Traverse every pair to find the target segment
+    print(f'check: poslist1 {pos_list1} \n poslist2 {pos_list2}')
     for traj1 in pos_list1:
         for pos1 in range(len(traj1) - 1):
             A1, B1 = (
@@ -248,10 +249,12 @@ def count_intersection_segment(pos_list1, pos_list2):
                     )
                     if IsFormalCross(A1, B1, A2, B2):
                         P = CountSegIntersect(A1, B1, A2, B2)
+                        print(f'check2: formal cross {P}')
                         return A1, B1, A2, B2, P, P
                     if IsVehicleCross(A1, B1, A2, B2):
                         P1 = NumMultiPoint(AddPoint(A1, B1), 0.5)
                         P2 = NumMultiPoint(AddPoint(A2, B2), 0.5)
+                        print(f'check3: veh cross {P1} \n {P2}')
                         return A1, B1, A2, B2, P1, P2
 
     raise Exception("No target segment found.")

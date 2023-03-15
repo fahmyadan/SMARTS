@@ -4,6 +4,7 @@ from zoo.evaluation.metrics.collision.collision_data_parse import CollisionEvalu
 from zoo.evaluation.metrics.diversity.diversity_evaluation import DiversityEvaluation
 from zoo.evaluation.metrics.kinematics.kinematics_evaluation import KinematicsEvaluation
 from zoo.evaluation.metrics.offroad.offroad_data_parse import OffroadEvaluation
+from zoo.evaluation.metrics.evaluation_report import EvaluationReport
 
 
 def run_all_evaluation(

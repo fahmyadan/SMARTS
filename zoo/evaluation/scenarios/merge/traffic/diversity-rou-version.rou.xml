@@ -7,6 +7,6 @@
   lcOpposite="0.0" lcLookaheadLeft="0.0" lcSpeedGainRight="0.0" lcSublane="0.0" jmCrossingGap="0.0" jmIgnoreKeepClearTime="2.0" jmIgnoreFoeProb="0.0" jmTimegapMinor="1.0"
   impatience="0.0" jmIgnoreFoeSpeed="0.0"/>
   
-  <vehicle id="npc-lateral-straight" type="npc-lateral" depart="0" departLane="2" arrivalLane="2" departSpeed="5" departPos="410" arrivalPos="40" route="mergeLeft" color="255, 255, 0"/>
+  <vehicle id="npc-lateral-straight" type="npc-lateral" depart="0" departLane="2" arrivalLane="2" departSpeed="5" departPos="410" arrivalPos="40" route="mergeLeft" color="0,255,255"/>
 
 </routes>

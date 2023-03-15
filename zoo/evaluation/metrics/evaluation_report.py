@@ -21,6 +21,7 @@ class EvaluationReport:
 
     def result_output(self):
         result_file = os.path.join(self.csv_file_result_path, "report.csv")
+        print(f'check results csv {result_file}')
         if os.path.isfile(result_file):
             os.remove(result_file)
 

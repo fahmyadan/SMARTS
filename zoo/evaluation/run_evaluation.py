@@ -202,6 +202,8 @@ if __name__ == "__main__":
     agent_names, actors, agent_groups = build_social_agent_actors(
         batch_data["agent_list"]
     )
+
+    
     for scenario in batch_data["scenario_list"]:
         evaluate_agents_on_scenario(
             agent_names,
