@@ -6,7 +6,7 @@ from itertools import count
 from collections import namedtuple
 import pathlib 
 import os
-import datetime
+from  datetime import datetime
 import shutil
 import atexit
 
@@ -150,9 +150,11 @@ agent_ids = [f'Worker_{i}' for i in range(1,n_agents+1)]
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
 #Specify log directory 
+now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
 log_dir = f'./runs/latest/'
 model_dir = f'./model_paras/checkpoint'
-model_path = os.path.join(model_dir, "model"+".pth")
+model_path = os.path.join(model_dir, "model"+ now + ".pth")
 
 ###################################################################################################################################
 ################################################################ Main Logic ##################################################### 
@@ -178,7 +180,7 @@ def main():
     scenarios=args.scenarios,
     agent_specs=agent_specs,
     headless=args.headless,
-    sumo_headless=True,
+    sumo_headless=False,
     sumo_port= 45761)
 
     # Wrapper from MultiAgent to Single Agent env 
