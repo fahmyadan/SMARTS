@@ -109,7 +109,7 @@ def risk_obs(obs: Observation):
     alt_unif_risk = alt_risk_index_unified(long_lat_risk)
     
 
-    return unif_risks
+    return alt_unif_risk
 
 
 risk_indices_obs_adapter = Adapter(space=_RISK_INDICES_OBS, transform=risk_obs)
