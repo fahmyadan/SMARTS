@@ -16,6 +16,7 @@ def finish_episode(model,args, optimizer, device):
     R = 0
     saved_actions = model.saved_actions
     policy_losses = [] # list to save actor (policy) loss
+    policy_gae_losses = [] #list to save gae policy loss
     value_losses = [] # list to save critic (value) loss
     returns = [] # list to save the true values
 
@@ -30,14 +31,24 @@ def finish_episode(model,args, optimizer, device):
     returns = torch.tensor(returns).to(device=device, dtype=torch.float32)
     returns = (returns - returns.mean()) / (returns.std() + eps)
 
-    for (log_prob, value), R in zip(saved_actions, returns):
+    # gae = torch.zeros(1,1).to(device=device) -> Generlised advantage estimate 
+    # gae_lambda = 0.5
+    entropy_coeff = 0.2
+
+
+
+    for (log_prob, value, entropy ), R in zip(saved_actions, returns):
         advantage = R - value.item()
 
+        entropy_reg_loss = -log_prob * advantage - entropy_coeff * entropy 
+
         # calculate actor (policy) loss
-        policy_losses.append(-log_prob * advantage)
+        # policy_losses.append(-log_prob * advantage)
+
+        policy_losses.append(entropy_reg_loss)
 
         # calculate critic (value) loss using L1 smooth loss
-        value_losses.append(F.smooth_l1_loss(value, torch.tensor([R]).reshape([1,1]).to(device=device)))
+        value_losses.append(F.mse_loss(value, torch.tensor([R]).reshape([1,1]).to(device=device)))
 
     # reset gradients
     optimizer.zero_grad()
