@@ -111,7 +111,7 @@ def reward_adapter(env_obs, env_reward):
 
     if len(env_obs.events.collisions )!= 0:
         print('collision reward activated')
-        env_reward = -1 
+        env_reward = -5
     
     elif env_obs.ego_vehicle_state.speed < 2:
         # To discourage the vehicle from stopping 
@@ -125,17 +125,17 @@ def reward_adapter(env_obs, env_reward):
         norm_jerk = mag_jerk / max_jerk
 
 
-        env_reward = (0.5 * norm_speed) + (0.5* norm_distance) - (0.2* total_ego_risk) - (0.1 * norm_jerk)
+        env_reward = (0.5 * norm_speed) + (0.7 * norm_distance) - (0.1* total_ego_risk) - (0.1 * norm_jerk)
 
     return env_reward
 
 """
 Instantiate A2C model and optimiser 
 
-Agent obs space = [TTC(3,), DTC(3,), Position(3,), Linear_velocity(3,), Angular_vel(3,)]
+Agent obs space = [Total Risk (1,), TTC(3,), DTC(3,), Position(3,), Linear_velocity(3,), Angular_vel(3,)]
 """
 
-agent_obs_size = 15 
+agent_obs_size = 16
 
 a2c = ACPolicy(input_size=agent_obs_size, disc_action_size=4)
 a2c_optimizer = optim.Adam(a2c.parameters(), lr=3e-4)
@@ -147,14 +147,14 @@ n_agents = 1
 agent_ids = [f'Worker_{i}' for i in range(1,n_agents+1)] 
 
 # Instantiate the memory object / replay buffer
-SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
+SavedAction = namedtuple('SavedAction', ['log_prob', 'value', 'entropy'])
 
 #Specify log directory 
 now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 log_dir = f'./runs/latest/'
 model_dir = f'./model_paras/checkpoint'
-model_path = os.path.join(model_dir, "model"+ now + ".pth")
+model_path = os.path.join(model_dir, "model-"+ now + ".pth")
 
 ###################################################################################################################################
 ################################################################ Main Logic ##################################################### 
@@ -209,11 +209,16 @@ def main():
 
         observations = env.reset()
         episode_reward = 0 
-
+        
+        total_risk = np.array(sum(observations[-1].values()))
+        # agent_obs_array = np.array([observations[1]['ego_lane_dist'], observations[1]['ego_ttc'],
+        #                             observations[0].ego_vehicle_state.position, observations[0].ego_vehicle_state.linear_velocity,
+        #                             observations[0].ego_vehicle_state.angular_velocity]).reshape(1,agent_obs_size)
         agent_obs_array = np.array([observations[1]['ego_lane_dist'], observations[1]['ego_ttc'],
                                     observations[0].ego_vehicle_state.position, observations[0].ego_vehicle_state.linear_velocity,
-                                    observations[0].ego_vehicle_state.angular_velocity]).reshape(1,agent_obs_size)
+                                    observations[0].ego_vehicle_state.angular_velocity])
 
+        agent_obs_array = np.append(agent_obs_array, total_risk).reshape(1,agent_obs_size)
         
         # TODO: Set up Traci connection for manager obs
 
@@ -235,11 +240,15 @@ def main():
            
             a2c.rewards.append(reward)
             episode_reward += reward
+
+            #Add risk metric to observation space.. take sum of all values in risk_dict 
+            total_risk = np.array(sum(observations[-1].values()))
             
             # Reassign observations for forward pass: [TTC(3,), DTC(3,), Position(3,), Linear_velocity(3,), Angular_vel(3,)]
             agent_obs_array = np.array([observations[1]['ego_lane_dist'], observations[1]['ego_ttc'],
                                         observations[0].ego_vehicle_state.position, observations[0].ego_vehicle_state.linear_velocity,
-                                        observations[0].ego_vehicle_state.angular_velocity]).reshape(1,agent_obs_size)
+                                        observations[0].ego_vehicle_state.angular_velocity])
+            agent_obs_array = np.append(agent_obs_array, total_risk).reshape(1,agent_obs_size)
             steps+=1
 
             if done: 
