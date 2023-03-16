@@ -13,9 +13,9 @@ def select_action(state, model, SavedAction, device):
 
     # and sample an action using the distribution
     action = m.sample()
-
+    entropy = m.entropy()
     # save to action buffer
-    model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
+    model.saved_actions.append(SavedAction(m.log_prob(action), state_value, entropy))
 
     # the action to take (left or right)
     return action.item()
