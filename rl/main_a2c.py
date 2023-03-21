@@ -96,11 +96,13 @@ Reward Adapter: This function returns a scalar reward for the environment.
                 The elements of the reward vary in magnitude and units. They must be normalised to a value between 0,1
                 max speed: 20m/s -> assumption according to vehicle model 
                 max distance travelled: max distance in one time step given ackermann chassis vehicle kinematics (dt=0.1 max_speed =20, acc = 5)
+                total distance : 180m approx along the length of the whole route 
                 jerk : TBD
 """
 def reward_adapter(env_obs, env_reward):
     max_speed: float = 20.0 
-    max_distance: float = 5
+    max_distance: float = 6
+    total_distance: float = 180
     max_acc: float = 5
     max_jerk: float = max_acc / 0.1
     risk_dict = risk_obs(env_obs)
@@ -116,7 +118,7 @@ def reward_adapter(env_obs, env_reward):
     elif env_obs.ego_vehicle_state.speed < 2:
         # To discourage the vehicle from stopping 
  
-        env_reward = -0.1
+        env_reward = -1
         
     else: 
 
@@ -164,8 +166,8 @@ def main():
     scenario_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scenarios/intersections/4lane')
     args.scenarios = [scenario_dir]
     args.headless = True 
-    args.num_step = 50
-    args.num_episodes = 10
+    args.num_step = 500
+    args.num_episodes = 100
     args.log_interval = 5
 
     # a2c_agent_interface = AgentInterface(action=ActionSpaceType.Lane, max_episode_steps=args.num_step, neighborhood_vehicles=NeighborhoodVehicles(radius=25))
@@ -234,7 +236,7 @@ def main():
             agent_lane_actions = agents['Worker_1'].act(obs=observations, sampled_action= agent_action)
 
             observations, reward, done, info = env.step(agent_lane_actions)
-            # print(f'action : {agent_lane_actions}')
+   
            
             episode.record_step(observations, episode_reward, done, info)
            
