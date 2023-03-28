@@ -1,0 +1,5 @@
+{
+    "pythonPath": "/home/fahmy/PhD/Experiments/SMARTS/rl/epymarl/.marl/bin/python3",
+    "program": "/home/fahmy/PhD/Experiments/SMARTS/rl/epymarl/src/main.py",
+    "args": ["--config", "qmix", "--env-config", "smarts"]
+}

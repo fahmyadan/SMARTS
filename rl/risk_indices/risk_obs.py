@@ -9,7 +9,8 @@ from smarts.core.coordinates import Heading
 from smarts.core.sensors import Observation
 from smarts.core.utils.math import squared_dist, vec_2d, vec_to_radians, position_to_ego_frame, velocity_to_ego_frame
 
-from risk_indices.risk_indices import safe_lon_distances, safe_lat_distances,risk_index, risk_index_unified, alt_risk_index_unified
+# from risk_indices.risk_indices import safe_lon_distances, safe_lat_distances,risk_index, risk_index_unified, alt_risk_index_unified
+from .risk_indices import safe_lon_distances, safe_lat_distances,risk_index, risk_index_unified, alt_risk_index_unified
 
 @dataclass
 class Adapter:
@@ -48,8 +49,7 @@ def risk_obs(obs: Observation):
     local_frame_vel_dict = {}
     if ego_lin_vel[1] > 5: 
         print(f'ego lin vel {ego_lin_vel}')
-        time.sleep(5)
-
+  
     if neighbors:
 
         for neighbor in neighbors: 

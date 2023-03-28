@@ -23,15 +23,18 @@ import warnings
 from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import gym
+import numpy as np 
+from gym.spaces import flatdim
 
 from envision.client import Client as Envision
-from smarts.core import seed as smarts_seed
+from smarts.core import agent, seed as smarts_seed
 from smarts.core.scenario import Scenario
 from smarts.core.sensors import Observation
 from smarts.core.smarts import SMARTS
 from smarts.core.utils.logging import timeit
 from smarts.core.utils.visdom_client import VisdomClient
 from smarts.zoo.agent_spec import AgentSpec
+from smarts.core.controllers import ActionSpaceType
 
 
 class HiWayEnv(gym.Env):
@@ -216,7 +219,7 @@ class HiWayEnv(gym.Env):
     def step(
         self, agent_actions
     ) -> Tuple[
-        Dict[str, Observation], Dict[str, float], Dict[str, bool], Dict[str, Any]
+        Dict[str, Observation], Tuple[float], Dict[str, bool], Dict[str, Any]
     ]:
         """Steps the environment.
 
@@ -227,9 +230,15 @@ class HiWayEnv(gym.Env):
             Tuple[ Dict[str, Observation], Dict[str, float], Dict[str, bool], Dict[str, Any] ]:
                 Observations, rewards, dones, and infos for active agents.
         """
+
+        epymarl_actions = self.epymarl_actions(agent_actions)
+        # agent_actions = {
+        #     agent_id: self._agent_specs[agent_id].action_adapter(action)
+        #     for agent_id, action in agent_actions.items()
+        # }
         agent_actions = {
             agent_id: self._agent_specs[agent_id].action_adapter(action)
-            for agent_id, action in agent_actions.items()
+            for agent_id, action in epymarl_actions.items()
         }
 
         assert isinstance(agent_actions, dict) and all(
@@ -260,6 +269,9 @@ class HiWayEnv(gym.Env):
 
         dones["__all__"] = self._dones_registered >= len(self._agent_specs)
 
+        rewards = self.epymarl_rewards(rewards)
+        infos = self._info(infos)
+
         return observations, rewards, dones, infos
 
     def reset(self) -> Dict[str, Observation]:
@@ -289,3 +301,134 @@ class HiWayEnv(gym.Env):
         if self._smarts is not None:
             self._smarts.destroy()
             self._smarts = None
+
+    def get_env_info(self):
+
+        env_info ={}
+        env_info['n_agents'] = 4
+        env_info['n_actions'] = 4
+        env_info['state_shape'] = 36
+        env_info['obs_shape'] = 9
+        env_info['episode_limit'] = 1000
+        env_info['name'] = 'smarts'
+
+        return env_info
+
+    def get_state(self):
+        """
+        Gets global state 
+        """
+
+        agent_ids = [agentid for agentid in self._agent_specs.keys()]
+
+        observations, _, _, _  =  self._smarts.agent_manager.observe(self._smarts)
+
+        self.state = {}
+
+        obvs = []
+
+        for ids, obs in observations.items():
+
+            self.state[ids] = np.array([obs.ego_vehicle_state.position, obs.ego_vehicle_state.linear_velocity, obs.ego_vehicle_state.angular_velocity]).reshape(1,9)
+
+            obvs.append(self.state[ids])
+
+        print('check obs', obvs)
+
+        return  np.hstack(obvs)
+
+    def get_avail_actions(self):
+        agent_ids = [agentid for agentid in self._agent_specs.keys()]
+        avail_actions = []
+  
+        for agent_id in agent_ids:
+
+            avail_agent = self.get_avail_agent_actions(agent_id)
+            avail_actions.append(avail_agent)
+        return avail_actions
+
+    def get_avail_agent_actions(self, agent_id):
+        """ Returns the available actions for agent_id """
+
+
+        avail_actions = self._agent_specs[agent_id].interface.action
+
+        if avail_actions is ActionSpaceType.Lane: 
+
+            actions = np.arange(0,4)
+            return actions
+        else:
+            return avail_actions
+
+    def get_obs(self):
+        """
+        Get partial observation 
+        """
+
+        agent_ids = [agentid for agentid in self._agent_specs.keys()]
+        observation = []
+
+        for ids in agent_ids:
+
+            observation.append(self.get_obs_agent(ids))
+
+
+        return np.vstack(observation)
+
+
+
+    def get_obs_agent(self, agent_id):
+        
+        state = self.state
+
+        print('check id obs ', agent_id, 'state observed ', state.get(agent_id))
+
+        if state.get(agent_id) is None: 
+
+            return None 
+        else: 
+            return state[agent_id]
+    
+    def build_agent(self):
+
+        agents = { agent_id: agent_spec.build_agent() for agent_id, agent_spec in self._agent_specs.items() }
+
+        return agents
+    
+    def epymarl_actions(self, actions):
+        agent_ids = [agentid for agentid in self._agent_specs.keys()]
+
+        action_dict = {}
+
+        for i in range(len(actions)):
+
+            action_dict[agent_ids[i]] = actions[i].cpu().numpy()
+
+        return action_dict
+
+    def epymarl_rewards(self, rewards:Dict[str,float]) -> float:
+
+        """
+        Reward from the env should be returned as single value 
+        """
+
+        return sum(tuple(rewards.values())) 
+
+    def _info(self,info):
+        _info = {'collision': False , 'reached_goal': True}
+
+        for agents in info.values():
+            _info['collision'] |= agents['collision']
+            _info['reached_goal'] &= agents['reached_goal']
+
+        return _info
+
+
+
+
+
+
+
+
+
+    

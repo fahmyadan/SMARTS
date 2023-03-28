@@ -1,0 +1,27 @@
+env: smarts
+
+env_args:
+  visdom: False # If True, enables Visdom display.
+  sumo_gui: False # If True, enables sumo-gui display.
+  scenarios: "intersections/4lane"
+  
+episode_limit: 1000
+
+
+test_greedy: True
+test_nepisode: 100
+test_interval: 50000
+log_interval: 50000
+runner_log_interval: 10000
+learner_log_interval: 10000
+t_max: 2050000
+
+# --- RL hyperparameters ---
+gamma: 0.99
+batch_size: 32 # Number of episodes to train on
+buffer_size: 32 # Size of the replay buffer
+lr: 0.0005 # Learning rate for agents
+optim_alpha: 0.99 # RMSProp alpha
+optim_eps: 0.00001 # RMSProp epsilon
+grad_norm_clip: 10 # Reduce magnitude of gradients above this L2 norm
+add_value_last_step: True

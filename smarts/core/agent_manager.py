@@ -135,6 +135,7 @@ class AgentManager:
         rewards = {}
         dones = {}
         scores = {}
+
         for v_id in vehicle_ids:
             vehicle = sim.vehicle_index.vehicle_by_id(v_id)
             agent_id = self._vehicle_with_sensors[v_id]
