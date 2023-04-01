@@ -1,9 +1,16 @@
+from typing import Dict, Any
+from unittest.mock import ANY
 from envs import REGISTRY as env_REGISTRY
 from functools import partial
 from components.episode_buffer import EpisodeBatch
 import numpy as np
 
 from smarts.env.intersection_env import intersection_v0_env
+from smarts.env.intersection_class import observation_adapter, reward_adapter, action_adapter, info_adapter, LaneAgent
+
+from smarts.core.agent_interface import AgentInterface, NeighborhoodVehicles, AgentType
+from smarts.zoo.agent_spec import AgentSpec
+
 
 
 class EpisodeRunner:
@@ -13,8 +20,11 @@ class EpisodeRunner:
         self.logger = logger
         self.batch_size = self.args.batch_size_run
         assert self.batch_size == 1
-        self.env = intersection_v0_env()
-        # self.env = env_REGISTRY[self.args.env](**self.args.env_args)
+        # self.env = intersection_v0_env()
+
+        self.agent_specs = self.agent_env_interface(self.args.agent_interface, self.args.env_info)
+
+        self.env = env_REGISTRY[self.args.env](agent_specs = self.agent_specs, **self.args.env_args)
         self.episode_limit = self.args.episode_limit
         self.t = 0
 
@@ -33,6 +43,28 @@ class EpisodeRunner:
                                  preprocess=preprocess, device=self.args.device)
         self.mac = mac
 
+    def agent_env_interface(self, env_args: Dict[str,Any], env_info) -> Dict[str,AgentSpec]:
+
+        args_interface = env_args
+        agent_ids = [f'Agent {i}' for i in range(1, env_info['n_agents']+1)]
+
+
+        if args_interface['agent_type'] == 'Laner':
+
+            req_type = AgentType.Laner
+        else: 
+            raise ValueError('Unknown Agent type requested')
+
+        _agent_interface = AgentInterface.from_type(requested_type=req_type,
+                                                    neighborhood_vehicles=NeighborhoodVehicles(radius=args_interface['neighbourhood_vehicle_radius'])), 
+
+        _agent_specs = AgentSpec(interface= _agent_interface, agent_builder=LaneAgent, reward_adapter=reward_adapter,
+                                observation_adapter=observation_adapter, action_adapter=action_adapter, info_adapter=info_adapter)
+
+        
+        agent_specs = {agent_id: _agent_specs for agent_id in agent_ids}
+        return agent_specs
+    
     def get_env_info(self):
         return self.env.get_env_info()
 
@@ -48,7 +80,6 @@ class EpisodeRunner:
         self.t = 0
 
     def run(self, test_mode=False):
-        self.env.build_agent()
         self.reset()
 
         terminated = False
@@ -56,6 +87,7 @@ class EpisodeRunner:
         self.mac.init_hidden(batch_size=self.batch_size)
 
         while not terminated:
+            print(f'top of while loop')
 
             pre_transition_data = {
                 "state": [self.env.get_state()],
@@ -87,6 +119,7 @@ class EpisodeRunner:
             self.batch.update(post_transition_data, ts=self.t)
 
             self.t += 1
+            print(f'out of while loop')
 
         last_data = {
             "state": [self.env.get_state()],
@@ -103,7 +136,6 @@ class EpisodeRunner:
         cur_stats = self.test_stats if test_mode else self.train_stats
         cur_returns = self.test_returns if test_mode else self.train_returns
         log_prefix = "test_" if test_mode else ""
-        print(f'check cur stats {cur_stats}, \n set {set(cur_stats) | set(env_info)} ')
         cur_stats.update({k: cur_stats.get(k, 0) + env_info.get(k, 0) for k in set(cur_stats) | set(env_info)})
         cur_stats["n_episodes"] = 1 + cur_stats.get("n_episodes", 0)
         cur_stats["ep_length"] = self.t + cur_stats.get("ep_length", 0)
