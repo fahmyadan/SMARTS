@@ -2,8 +2,29 @@ env: smarts
 
 env_args:
   visdom: False # If True, enables Visdom display.
-  sumo_gui: False # If True, enables sumo-gui display.
+  sumo_headless: True # If True, enables sumo-gui display.
   scenarios: "intersections/4lane"
+  headless: False
+  shuffle_scenarios: False 
+agent_interface:
+  agent_type: Laner
+  neighbourhood_vehicle_radius: 100
+  accelerometer: True 
+  max_episode_steps: 1000
+agent_spec:
+  agent_builder: LaneAgent
+  reward_adapter: reward_adapter
+  observation_adapter: observation_adapter
+env_info:
+  n_agents: 4
+  n_actions: 4
+  state_shape: 36
+  obs_shape: 9
+  episode_limit: 1000
+  name: intersection  
+
+
+
   
 episode_limit: 1000
 
