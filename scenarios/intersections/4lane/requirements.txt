@@ -1,3 +1,0 @@
-# we'll be serving packages from a local pip index
---extra-index-url http://localhost:8080
-a2c-rl-agent==0.1.1
