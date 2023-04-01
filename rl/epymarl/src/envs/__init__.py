@@ -17,22 +17,20 @@ def env_fn(env, **kwargs) -> MultiAgentEnv:
     return env(**kwargs)
 
 smarts_root = Path(__file__).absolute().parents[4]
-print(f'smarts root {smarts_root}')
+
 sys.path.append(str(smarts_root))
-print(f'path {sys.path}')
 
-from smarts.env.intersection_env import intersection_v0_env
 
-print('env check',intersection_v0_env())
+from smarts.env.intersection_class import IntersectionEnv
 
 REGISTRY = {}
-REGISTRY["smarts"] = intersection_v0_env()
+REGISTRY["smarts"] = partial(env_fn, env=IntersectionEnv)
 
 
-# register(
-#   id="IntersectionEnv-v0",                     # Environment ID.
-#   entry_point="smarts.envs.intersection_env:intersection_env",  # The entry point for the environment class
-# )
+register(
+  id="IntersectionEnv-v0",                     # Environment ID.
+  entry_point="smarts.envs.intersection_class:IntersectionEnv",  # The entry point for the environment class
+)
 
 if sys.platform == "linux":
     os.environ.setdefault(
