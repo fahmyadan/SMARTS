@@ -6,11 +6,8 @@ from pathlib import Path
 
 epymarl_src_root = Path(__file__).absolute().parents[0]
 
-print(f'epymarl root {epymarl_src_root}')
-print(f'path1 {sys.path}')
-
 sys.path.append(str(epymarl_src_root))
-print(f'new path {sys.path}')
+
 import pprint
 import time
 import threading
