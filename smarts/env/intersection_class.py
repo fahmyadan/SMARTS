@@ -9,6 +9,7 @@ from pathlib import Path
 
 from envision.client import Client as Envision
 from smarts.core import agent, seed as smarts_seed
+from smarts.core import smarts
 from smarts.core.scenario import Scenario
 from smarts.core.sensors import Observation
 from smarts.core.smarts import SMARTS
@@ -64,10 +65,12 @@ class IntersectionEnv(gym.Env):
         timestep_sec: Optional[
             float
         ] = None,  # for backwards compatibility (deprecated)
+        **kwargs
     ):
         self._log = logging.getLogger(self.__class__.__name__)
         self.seed(seed)
-        self.n_agents = 4
+        self.env_info = kwargs
+        self.n_agents = self.env_info['n_agents']
         self.sumo_headless = sumo_headless
         self.sumo_port = sumo_port
         self.num_external_sumo_clients = num_external_sumo_clients
@@ -95,13 +98,14 @@ class IntersectionEnv(gym.Env):
 
         self.scenarios = scenarios
 
+
         self._agent_specs = agent_specs 
 
         
         self._dones_registered = 0
 
         self.agent_interfaces = {
-            agent_id: agent.interface[0] for agent_id, agent in agent_specs.items()
+            agent_id: agent.interface for agent_id, agent in agent_specs.items()
         }
 
         
@@ -259,11 +263,11 @@ class IntersectionEnv(gym.Env):
     def get_env_info(self):
 
         env_info ={}
-        env_info['n_agents'] = 4
-        env_info['n_actions'] = 4
-        env_info['state_shape'] = 36
-        env_info['obs_shape'] = 9
-        env_info['episode_limit'] = 1000
+        env_info['n_agents'] = self.n_agents
+        env_info['n_actions'] = self.env_info['n_actions']
+        env_info['obs_shape'] = self.env_info['obs_shape']
+        env_info['episode_limit'] = self.env_info['episode_limit']
+        env_info['state_shape'] = 64  #env_info['obs_shape'] * env_info['n_agents'] 
         env_info['name'] = 'smarts'
 
         return env_info
@@ -271,24 +275,53 @@ class IntersectionEnv(gym.Env):
     def get_state(self):
         """
         Gets global state 
+        # """
+        # obsers = {
+        #     agent_id: self._agent_specs[agent_id].observation_adapter(obs)
+        #     for agent_id, obs in env_observations.items()
+        # }
+
+        a_ids = [ids for ids in self._agent_specs.keys()]
+
+        smarts_observations, _, _, _  =  self._smarts.agent_manager.observe(self._smarts)
+        
+        # Mask observation if agent is not present in full list (i.e. has crashed)
         """
+        Be aware that masking/padding the obs space will add noise to the model. 
+        By adding zeros, values like risk, ttc etc will get distorted. Lets try it for now
+        """
+        observations = {agent_id: self._agent_specs[agent_id].observation_adapter(obs)
+                         for agent_id, obs  in smarts_observations.items()}
 
-        agent_ids = [agentid for agentid in self._agent_specs.keys()]
+        for ids in smarts_observations.keys():
+            
+            if len(smarts_observations[ids].via_data.hit_via_points) >0:
 
-        # observations, _, _, _  =  self._smarts.agent_manager.observe(self._smarts)
-        observations = {agent_id: np.random.randn(1,9) for agent_id in agent_ids}
+                print(f'success. {ids} hit a via point in last step')
 
-        self.state = observations
+        if len(observations.keys()) != len(a_ids):
+                observations = {agent_id: self._agent_specs[agent_id].observation_adapter(smarts_observations[agent_id]) 
+                                if agent_id in observations.keys() 
+                                else np.zeros([1,16]) 
+                                for agent_id in a_ids}
+                print('check mask')
+        self.agent_obs = smarts_observations
+        self.state_list = []
 
-        # obvs = []
+        for vals in observations.values():
+            self.state_list.append(vals)
+        
+        self.state = np.hstack(self.state_list)
 
-        # for ids, obs in observations.items():
-            # self.state[ids] = np.array([obs.ego_vehicle_state.position, obs.ego_vehicle_state.linear_velocity, obs.ego_vehicle_state.angular_velocity]).reshape(1,9)
-            # obvs.append(self.state[ids])
+        # # obvs = []
 
-        dummy = np.random.randn(1,36)
+        # # for ids, obs in observations.items():
+        #     # self.state[ids] = np.array([obs.ego_vehicle_state.position, obs.ego_vehicle_state.linear_velocity, obs.ego_vehicle_state.angular_velocity]).reshape(1,9)
+        #     # obvs.append(self.state[ids])
 
-        return  dummy #np.hstack(obvs)[0]
+        # dummy = np.random.randn(1,36)
+
+        return self.state 
 
     def get_avail_actions(self):
         agent_ids = [agentid for agentid in self._agent_specs.keys()]
@@ -318,15 +351,15 @@ class IntersectionEnv(gym.Env):
         Get partial observation 
         """
 
-        agent_ids = [agentid for agentid in self._agent_specs.keys()]
-        observation = []
+        # agent_ids = [agentid for agentid in self._agent_specs.keys()]
+        # observation = []
 
-        for ids in agent_ids:
+        # for ids in agent_ids:
 
-            observation.append(self.get_obs_agent(ids))
+        #     observation.append(self.get_obs_agent(ids))
 
-        print(f'check obs {observation}')
-        return np.vstack(observation)
+        # print(f'check obs {observation}')
+        return np.vstack(self.state_list)
 
 
 
@@ -418,9 +451,10 @@ def observation_adapter(env_obs):
     observations = env_obs, ttc_obs, risk_dict
     total_risk = np.array(sum(observations[-1].values()))
     agent_obs_array = np.array([observations[1]['ego_lane_dist'], observations[1]['ego_ttc'],
-                                    observations[0].ego_vehicle_state.position, observations[0].ego_vehicle_state.linear_velocity,
-                                    observations[0].ego_vehicle_state.angular_velocity])
-
+                                observations[0].ego_vehicle_state.position, observations[0].ego_vehicle_state.linear_velocity,
+                                observations[0].ego_vehicle_state.angular_velocity],
+                                    )
+    # neighbor_states = observations[0].neighborhood_vehicle_states
     agent_obs_array = np.append(agent_obs_array, total_risk).reshape(1,agent_obs_size)
 
     return agent_obs_array
@@ -440,7 +474,7 @@ def reward_adapter(env_obs, env_reward):
 
     if len(env_obs.events.collisions )!= 0:
         print('collision reward activated')
-        env_reward = -5
+        env_reward = -10
     
     elif env_obs.ego_vehicle_state.speed < 2:
         # To discourage the vehicle from stopping 
@@ -454,7 +488,7 @@ def reward_adapter(env_obs, env_reward):
         norm_jerk = mag_jerk / max_jerk
 
 
-        env_reward = (0.5 * norm_speed) + (0.7 * norm_distance) - (0.1* total_ego_risk) - (0.1 * norm_jerk)
+        env_reward = (0.2 * norm_speed) + (0.5 * norm_distance) - (0.5* total_ego_risk) - (0.2 * norm_jerk)
 
     return env_reward 
 
