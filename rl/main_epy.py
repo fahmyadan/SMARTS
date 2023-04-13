@@ -1,3 +1,4 @@
+import logging
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # Silence the TF logs
@@ -24,6 +25,7 @@ import yaml
 from epymarl.src.run import run
 SETTINGS['CAPTURE_MODE'] = "fd" # set to "no" if you want to see stdout/stderr in console
 logger = get_logger()
+logger.setLevel(logging.ERROR)
 
 ex = Experiment("pymarl")
 ex.logger = logger
