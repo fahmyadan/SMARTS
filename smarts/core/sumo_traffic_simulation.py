@@ -86,6 +86,7 @@ class SumoTrafficSimulation(Provider):
     ):
         self._remove_agents_only_mode = remove_agents_only_mode
         self._log = logging.getLogger(self.__class__.__name__)
+        logging.basicConfig(level=logging.WARNING)
 
         self._debug = debug
         self._scenario = None
