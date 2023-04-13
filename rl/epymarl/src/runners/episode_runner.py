@@ -88,8 +88,6 @@ class EpisodeRunner:
         self.mac.init_hidden(batch_size=self.batch_size)
 
         while not terminated:
-            print(f'top of while loop')
-
             pre_transition_data = {
                 "state": [self.env.get_state()],
                 "avail_actions": [self.env.get_avail_actions()],
