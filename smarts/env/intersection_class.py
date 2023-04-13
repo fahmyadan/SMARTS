@@ -81,7 +81,6 @@ class IntersectionEnv(gym.Env):
         self.fixed_timestep_sec = fixed_timestep_sec
 
 
-
         if timestep_sec and not fixed_timestep_sec:
             warnings.warn(
                 "timestep_sec has been deprecated in favor of fixed_timestep_sec.  Please update your code.",
@@ -91,10 +90,8 @@ class IntersectionEnv(gym.Env):
             fixed_timestep_sec = timestep_sec or 0.1
         self.action_space = gym.spaces.Discrete(4)
     
-        scenarios = [str(Path(__file__).absolute().parents[2]           
-                / "scenarios"
-                 / "intersections"
-                 / "4lane")]
+        scenarios = [str(Path(__file__).absolute().parents[2]/"scenarios"/scenarios)]        
+                
 
         self.scenarios = scenarios
 
@@ -199,7 +196,6 @@ class IntersectionEnv(gym.Env):
 
         observations, rewards, dones, extras = None, None, None, None
         with timeit("SMARTS Simulation/Scenario Step", self._log):
-            logging.log(logging.DEBUG, f'STEPPING SMARTS')
             observations, rewards, dones, extras = self._smarts.step(agent_actions)
 
         infos = {
@@ -377,10 +373,6 @@ class IntersectionEnv(gym.Env):
             return state[agent_id]
     
     def build_smarts(self):
-        logging.log(
-            logging.DEBUG,
-            f"BUILDING SMARTS",
-        )
         envision_client = None
         if not self.headless or self.envision_record_data_replay_path:
             envision_client = Envision(
@@ -403,11 +395,6 @@ class IntersectionEnv(gym.Env):
             fixed_timestep_sec=self.fixed_timestep_sec,
 
         )
-        logging.log(
-                        logging.DEBUG,
-                        f"BUILDING SMARTS DONE",
-                    )
-        
 
         agents = { agent_id: agent_spec.build_agent() for agent_id, agent_spec in self._agent_specs.items() }
 
