@@ -2,10 +2,11 @@ env: smarts
 
 env_args:
   visdom: False # If True, enables Visdom display.
-  sumo_headless: True # If True, enables sumo-gui display.
+  sumo_headless: False # If True, enables sumo-gui display.
   scenarios: "intersections/4lane"
-  headless: False
-  shuffle_scenarios: False 
+  headless: True
+  shuffle_scenarios: False
+
 agent_interface:
   agent_type: Laner
   neighbourhood_vehicle_radius: 100
@@ -18,28 +19,28 @@ agent_spec:
 env_info:
   n_agents: 4
   n_actions: 4
-  state_shape: 36
-  obs_shape: 9
-  episode_limit: 1000
+  state_shape: 64
+  obs_shape: 16
+  episode_limit: 10000
   name: intersection  
 
 
 
   
-episode_limit: 1000
+episode_limit: 10000
 
 
 test_greedy: True
-test_nepisode: 100
-test_interval: 50000
-log_interval: 50000
-runner_log_interval: 10000
-learner_log_interval: 10000
+test_nepisode: 5
+test_interval: 500
+log_interval: 50
+runner_log_interval: 10
+learner_log_interval: 10
 t_max: 2050000
 
 # --- RL hyperparameters ---
 gamma: 0.99
-batch_size: 32 # Number of episodes to train on
+batch_size: 10 # Number of episodes to train on
 buffer_size: 32 # Size of the replay buffer
 lr: 0.0005 # Learning rate for agents
 optim_alpha: 0.99 # RMSProp alpha
