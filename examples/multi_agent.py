@@ -9,6 +9,7 @@ from smarts.core.agent_interface import AgentInterface, AgentType
 from smarts.core.utils.episodes import episodes
 from smarts.sstudio import build_scenario
 from smarts.zoo.agent_spec import AgentSpec
+from smarts.core.sensors import Observation
 
 N_AGENTS = 4
 AGENT_IDS = ["Agent %i" % i for i in range(N_AGENTS)]
@@ -18,14 +19,30 @@ class KeepLaneAgent(Agent):
     def act(self, obs):
         return "keep_lane"
 
+class ChaseViaPointsAgent(Agent):
+    def act(self, obs: Observation):
+        if (
+            len(obs.via_data.near_via_points) < 1
+            or obs.ego_vehicle_state.road_id != obs.via_data.near_via_points[0].road_id
+        ):
+            return (obs.waypoint_paths[0][0].speed_limit, 0)
+
+        nearest = obs.via_data.near_via_points[0]
+        if nearest.lane_index == obs.ego_vehicle_state.lane_index:
+            return (nearest.required_speed, 0)
+
+        return (
+            nearest.required_speed,
+            1 if nearest.lane_index > obs.ego_vehicle_state.lane_index else -1,
+        )
 
 def main(scenarios, headless, num_episodes, max_episode_steps=None):
     agent_specs = {
         agent_id: AgentSpec(
             interface=AgentInterface.from_type(
-                AgentType.Laner, max_episode_steps=max_episode_steps
+                AgentType.LanerWithSpeed, max_episode_steps=max_episode_steps
             ),
-            agent_builder=KeepLaneAgent,
+            agent_builder=ChaseViaPointsAgent
         )
         for agent_id in AGENT_IDS
     }
@@ -35,7 +52,7 @@ def main(scenarios, headless, num_episodes, max_episode_steps=None):
         scenarios=scenarios,
         agent_specs=agent_specs,
         headless=headless,
-        sumo_headless=True,
+        sumo_headless=False,
     )
 
     for episode in episodes(n=num_episodes):
@@ -72,6 +89,6 @@ if __name__ == "__main__":
 
     main(
         scenarios=args.scenarios,
-        headless=args.headless,
+        headless=True,
         num_episodes=args.episodes,
     )
