@@ -24,7 +24,7 @@ class EpisodeRunner:
 
         self.agent_specs = self.agent_env_interface(self.args.agent_interface, self.args.env_info)
 
-        self.env = env_REGISTRY[self.args.env](agent_specs = self.agent_specs, **self.args.env_args)
+        self.env = env_REGISTRY[self.args.env](agent_specs = self.agent_specs, **self.args.env_args, **self.args.env_info)
         self.episode_limit = self.args.episode_limit
         self.t = 0
 
@@ -56,7 +56,8 @@ class EpisodeRunner:
             raise ValueError('Unknown Agent type requested')
 
         _agent_interface = AgentInterface.from_type(requested_type=req_type,
-                                                    neighborhood_vehicles=NeighborhoodVehicles(radius=args_interface['neighbourhood_vehicle_radius'])), 
+                                                    neighborhood_vehicles=NeighborhoodVehicles(radius=args_interface['neighbourhood_vehicle_radius']), 
+                                                    max_episode_steps=args_interface['max_episode_steps']) 
 
         _agent_specs = AgentSpec(interface= _agent_interface, agent_builder=LaneAgent, reward_adapter=reward_adapter,
                                 observation_adapter=observation_adapter, action_adapter=action_adapter, info_adapter=info_adapter)
@@ -94,7 +95,8 @@ class EpisodeRunner:
                 "avail_actions": [self.env.get_avail_actions()],
                 "obs": [self.env.get_obs()]
             }
-
+            if pre_transition_data['state'][0].shape != (1,64):
+                print('Agent is missing from state space')
             
             self.batch.update(pre_transition_data, ts=self.t)
    
@@ -103,9 +105,7 @@ class EpisodeRunner:
             # Receive the actions for each agent at this timestep in a batch of size 1
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
 
-            print(f'check actions {actions}')
             _, reward, terminated, env_info = self.env.step(actions[0])
-            print(f'check reward : {reward} \n INFO {env_info} \n terminated {terminated}')
             if test_mode and self.args.render:
                 self.env.render()
             episode_return += reward
@@ -119,7 +119,6 @@ class EpisodeRunner:
             self.batch.update(post_transition_data, ts=self.t)
 
             self.t += 1
-            print(f'out of while loop')
 
         last_data = {
             "state": [self.env.get_state()],
