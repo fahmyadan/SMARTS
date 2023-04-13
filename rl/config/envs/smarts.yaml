@@ -3,7 +3,7 @@ env: smarts
 env_args:
   visdom: False # If True, enables Visdom display.
   sumo_headless: False # If True, enables sumo-gui display.
-  scenarios: "intersections/4lane"
+  scenarios: "intersections/4lane_merge"
   headless: True
   shuffle_scenarios: False
 
@@ -22,7 +22,7 @@ env_info:
   state_shape: 64
   obs_shape: 16
   episode_limit: 10000
-  name: intersection  
+  name: intersection_merge
 
 
 
