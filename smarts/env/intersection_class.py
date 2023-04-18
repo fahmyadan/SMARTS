@@ -20,6 +20,7 @@ from smarts.core.controllers import ActionSpaceType
 from smarts.core.agent_interface import AgentInterface, AgentType, NeighborhoodVehicles, DoneCriteria
 from smarts.core.agent import Agent
 from smarts.core.sumo_traffic_simulation import SumoTrafficSimulation
+from smarts.core.utils.math import position_to_ego_frame, velocity_to_ego_frame
 
 
 from smarts.env.custom_observations import lane_ttc_observation_adapter
@@ -263,7 +264,7 @@ class IntersectionEnv(gym.Env):
         env_info['n_actions'] = self.env_info['n_actions']
         env_info['obs_shape'] = self.env_info['obs_shape']
         env_info['episode_limit'] = self.env_info['episode_limit']
-        env_info['state_shape'] = 64  #env_info['obs_shape'] * env_info['n_agents'] 
+        env_info['state_shape'] = env_info['obs_shape'] * env_info['n_agents'] 
         env_info['name'] = 'smarts'
 
         return env_info
@@ -298,9 +299,8 @@ class IntersectionEnv(gym.Env):
         if len(observations.keys()) != len(a_ids):
                 observations = {agent_id: self._agent_specs[agent_id].observation_adapter(smarts_observations[agent_id]) 
                                 if agent_id in observations.keys() 
-                                else np.zeros([1,16]) 
+                                else np.zeros([1,56]) 
                                 for agent_id in a_ids}
-                print('check mask')
         self.agent_obs = smarts_observations
         self.state_list = []
 
@@ -429,20 +429,66 @@ class IntersectionEnv(gym.Env):
         return _info
 
 agent_obs_size = 16
+neighbor_obs_size = 40 #(8,) for 5 of the closest neighbors 
+total_obs_size = agent_obs_size + neighbor_obs_size
+major_edges = ['edge-east-WE_0','edge-east-WE_1', 'edge-east-EW_0','edge-east-EW_1', 
+                'edge-west-EW_0', 'edge-west-EW_1 ','edge-west-WE_0', 'edge-west-WE_1']
 def observation_adapter(env_obs):
 
     ttc_obs = lane_ttc_observation_adapter.transform(env_obs)
-
+    ttc_right = ttc_obs['ego_ttc'][0]
+    ttc_current = ttc_obs['ego_ttc'][1]
+    ttc_left = ttc_obs['ego_ttc'][2]
     risk_dict = risk_obs(env_obs)
 
     observations = env_obs, ttc_obs, risk_dict
     total_risk = np.array(sum(observations[-1].values()))
-    agent_obs_array = np.array([observations[1]['ego_lane_dist'], observations[1]['ego_ttc'],
+    # Distance along the lane: 130m for major, 70m for minor
+    # Check for major/minor road
+    if env_obs.ego_vehicle_state.lane_id in major_edges:
+        lane_priority = 1 #major
+        intersection_distance = 130 - env_obs.distance_travelled
+    else:
+        lane_priority = 0 #minor
+        intersection_distance = 70 - env_obs.distance_travelled 
+
+    agent_obs_array = np.array([intersection_distance,lane_priority, observations[1]['distance_from_center'], ttc_right, ttc_current, ttc_left,
                                 observations[0].ego_vehicle_state.position, observations[0].ego_vehicle_state.linear_velocity,
-                                observations[0].ego_vehicle_state.angular_velocity],
+                                observations[0].ego_vehicle_state.linear_acceleration, observations[0].ego_vehicle_state.heading],
                                     )
-    # neighbor_states = observations[0].neighborhood_vehicle_states
-    agent_obs_array = np.append(agent_obs_array, total_risk).reshape(1,agent_obs_size)
+    
+    ego_obs = np.hstack(agent_obs_array)
+
+    neighbor_obs = {}
+    for detected in observations[0].neighborhood_vehicle_states:
+        neighbor_id = detected.id
+        neighbor_velocity = np.array([detected.speed, 0])
+        relative_position = np.array(position_to_ego_frame(position=detected.position, 
+                                ego_heading=observations[0].ego_vehicle_state.heading, 
+                                ego_position=observations[0].ego_vehicle_state.position))
+        relative_vel = velocity_to_ego_frame(neighbor_velocity, detected.heading,
+                                observations[0].ego_vehicle_state.heading)
+        neighbor_risk = risk_dict[neighbor_id]
+        neighbor_heading = detected.heading 
+        # Check priority
+        if detected.lane_id in major_edges:
+            detected_priority = 1
+        else: 
+            detected_priority = 0 
+ 
+        neighbor = np.array([relative_position, relative_vel,detected_priority ,neighbor_risk, neighbor_heading ])
+        neighbor_obs[neighbor_id] = neighbor
+    
+
+    # Get the 5 closest neighbors + CAVs approaching the intersection 
+    neighbor_distances = {k: np.linalg.norm(v[0]) for k, v in neighbor_obs.items()}
+    closest_veh_keys = sorted(neighbor_distances, key=neighbor_distances.get)[:5]
+    closest_neighbor_obs = {k: np.hstack(neighbor_obs[k]) for k in closest_veh_keys}
+
+    full_agent_obs = [ego_obs] + [vals for vals in closest_neighbor_obs.values()]
+    full_agent_obs = np.hstack(full_agent_obs)
+    
+    agent_obs_array = full_agent_obs.reshape(1,total_obs_size)
 
     return agent_obs_array
 

@@ -123,7 +123,6 @@ class Controllers:
                 action[1],
             )
         elif action_space == ActionSpaceType.Lane:
-            print(f'controller check {action}')
             perform_lane_following = partial(
                 LaneFollowingController.perform_lane_following,
                 sim=sim,

@@ -10,6 +10,7 @@ from smarts.env.intersection_class import observation_adapter, reward_adapter, a
 
 from smarts.core.agent_interface import AgentInterface, NeighborhoodVehicles, AgentType
 from smarts.zoo.agent_spec import AgentSpec
+from smarts.core.utils.episodes import episodes
 
 
 
@@ -81,7 +82,9 @@ class EpisodeRunner:
         self.t = 0
 
     def run(self, test_mode=False):
+        
         self.reset()
+
 
         terminated = False
         episode_return = 0
@@ -93,7 +96,7 @@ class EpisodeRunner:
                 "avail_actions": [self.env.get_avail_actions()],
                 "obs": [self.env.get_obs()]
             }
-            if pre_transition_data['state'][0].shape != (1,64):
+            if pre_transition_data['state'][0].shape != (1,224):
                 print('Agent is missing from state space')
             
             self.batch.update(pre_transition_data, ts=self.t)
