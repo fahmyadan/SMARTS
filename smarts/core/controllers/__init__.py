@@ -131,7 +131,7 @@ class Controllers:
                 controller_state=controller_state,
                 sensor_state=sensor_state,
             )
-
+            #print(f'controller is taking action {action}')
             # 12.5 m/s (45 km/h) is used as the nominal speed for lane change.
             # For keep_lane, the nominal speed is set to 15 m/s (54 km/h).
             if action == "keep_lane":

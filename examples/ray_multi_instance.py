@@ -170,7 +170,7 @@ def main(
     headless,
     num_episodes,
     seed,
-    num_cpus=None,
+    num_cpus=1,
 ):
     num_cpus = max(
         2, num_cpus or psutil.cpu_count(logical=False) or (psutil.cpu_count() / 2)
